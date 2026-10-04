@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "OPO",
+    "PEP",
+    "OPO"
+  ],
+  "key": {
+    "O": "minecraft:obsidian",
+    "P": "minecraft:ender_pearl",
+    "E": "minecraft:ender_eye"
+  },
+  "result": {
+    "id": "voidmaw:singularity_core",
+    "count": 1
+  }
+}

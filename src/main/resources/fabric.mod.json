@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "voidmaw",
+  "version": "${version}",
+  "name": "Void Maw",
+  "description": "Become a black hole: constantly devour blocks and creatures above you. The more you swallow, the bigger the maw grows - and when it closes, all that mass comes back as a devastating burst.",
+  "authors": [
+    "novapupil"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/voidmaw/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.novapupil.voidmaw.VoidMaw"
+    ],
+    "client": [
+      "com.novapupil.voidmaw.VoidMawClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21.10",
+    "java": ">=21"
+  }
+}

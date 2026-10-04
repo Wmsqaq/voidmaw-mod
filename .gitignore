@@ -1,0 +1,14 @@
+.gradle/
+build/
+out/
+run/
+remappedSrc/
+.idea/
+*.iml
+.vscode/
+bin/
+.classpath
+.project
+.settings/
+.gitee-token
+.gitee-notes.tmp

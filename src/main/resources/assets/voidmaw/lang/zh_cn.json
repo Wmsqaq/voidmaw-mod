@@ -1,0 +1,10 @@
+{
+  "item.voidmaw.singularity_core": "奇点核心",
+  "commands.voidmaw.started": "虚空之喉张开……你现在就是黑洞。（再次潜行使用核心可关闭）",
+  "commands.voidmaw.stopped": "虚空之喉猛然闭合！释放质量：%s",
+  "commands.voidmaw.not_active": "你目前不是黑洞。",
+  "commands.voidmaw.status_active": "黑洞运行中 —— 质量：%s，引力半径：%s 格，剩余时间：%s 秒",
+  "commands.voidmaw.status_idle": "当前没有黑洞。使用奇点核心或 /voidmaw start。",
+  "commands.voidmaw.already": "虚空之喉已经张开。（潜行 + 使用核心关闭）",
+  "hud.voidmaw.mass": "质量 %s | 半径 %s 格"
+}
