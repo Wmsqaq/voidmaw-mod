@@ -50,7 +50,7 @@ gradlew runClient    # 开发环境进游戏实测
 
 ## 发布流程
 
-1. 推送 tag（`v1.0.0` 格式）→ GitHub Actions 自动构建并创建 GitHub Release（`.github/workflows/release.yml`）。
+1. 推送 tag（`v1.0.0-beta.1` 格式，tag 含 beta/alpha 会自动标记为预发布）→ GitHub Actions 自动构建并创建 GitHub Release（`.github/workflows/release.yml`）。
 2. 本地运行 `bash tools/release-gitee.sh v1.0.0` 把 Release 镜像到 Gitee 并附上 jar（token 放在仓库根的 `.gitee-token`，已被 gitignore；Gitee 屏蔽云机房 IP，因此该步骤必须在本地跑）。
 
 ## 致谢 / 参考

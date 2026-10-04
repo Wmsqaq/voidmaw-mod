@@ -3,7 +3,7 @@
 #
 # Usage:
 #   gradlew build                 # jar must exist in build/libs first
-#   bash tools/release-gitee.sh v1.0.0
+#   bash tools/release-gitee.sh v1.0.0-beta.1
 #
 # Requirements: the GitHub release for <tag> must already exist (CI creates it on
 # tag push); the Gitee token is read from .gitee-token in the repo root (gitignored).
@@ -21,7 +21,7 @@ TOKEN=$(tr -d ' \r\n' < .gitee-token)
 GH_REPO=Wmsqaq/voidmaw-mod
 API="https://gitee.com/api/v5/repos/novapupil/voidmaw-mod"
 
-# The jar version must match the tag: v1.0.0 -> voidmaw-1.0.0.jar
+# The jar version must match the tag: v1.0.0-beta.1 -> voidmaw-1.0.0-beta.1.jar
 JAR="build/libs/voidmaw-${TAG#v}.jar"
 [ -f "$JAR" ] || { echo "missing $JAR — build the matching version first (gradlew.bat build)"; exit 1; }
 
