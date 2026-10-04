@@ -127,6 +127,11 @@ public final class BlackHoleRenderer {
                 vertex(consumer, matrix, center, radius, theta2, phi1);
                 vertex(consumer, matrix, center, radius, theta2, phi2);
                 vertex(consumer, matrix, center, radius, theta1, phi2);
+                // Same quad with reversed winding: the sphere stays visible regardless of cull state.
+                vertex(consumer, matrix, center, radius, theta1, phi2);
+                vertex(consumer, matrix, center, radius, theta2, phi2);
+                vertex(consumer, matrix, center, radius, theta2, phi1);
+                vertex(consumer, matrix, center, radius, theta1, phi1);
             }
         }
     }

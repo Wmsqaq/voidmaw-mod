@@ -69,13 +69,24 @@ public final class BlackHoleManager {
             player.addStatusEffect(new StatusEffectInstance(StatusEffects.FIRE_RESISTANCE, 60, 0, true, false));
             world.createExplosion(player, player.getX(), player.getY() + 1.0, player.getZ(),
                     Balance.explosionPowerFor(mass), World.ExplosionSourceType.MOB);
+            world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_GENERIC_EXPLODE.value(),
+                    SoundCategory.PLAYERS, 2.0f, 0.8f);
+            world.spawnParticles(ParticleTypes.EXPLOSION_EMITTER,
+                    player.getX(), player.getY() + 1.0, player.getZ(), 1, 0.0, 0.0, 0.0, 0.0);
+        } else {
+            world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT,
+                    SoundCategory.PLAYERS, 0.8f, 0.5f);
         }
-        world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_GENERIC_EXPLODE.value(),
-                SoundCategory.PLAYERS, 2.0f, 0.8f);
-        world.spawnParticles(ParticleTypes.EXPLOSION_EMITTER,
-                player.getX(), player.getY() + 1.0, player.getZ(), 1, 0.0, 0.0, 0.0, 0.0);
-        player.sendMessage(Text.translatable("commands.voidmaw.stopped", String.format("%.1f", mass)), false);
+        player.sendMessage(Text.translatable("commands.voidmaw.stopped",
+                String.format(java.util.Locale.ROOT, "%.1f", mass)), false);
         sync(player);
+    }
+
+    /** The maw collapses violently when its host dies. */
+    public static void onDeath(ServerPlayerEntity player) {
+        if (ACTIVE.containsKey(player.getUuid())) {
+            stop(player, true);
+        }
     }
 
     public static void sendStatus(ServerPlayerEntity player) {
@@ -84,8 +95,8 @@ public final class BlackHoleManager {
             player.sendMessage(Text.translatable("commands.voidmaw.status_idle"), false);
         } else {
             player.sendMessage(Text.translatable("commands.voidmaw.status_active",
-                    String.format("%.1f", state.mass()),
-                    String.format("%.1f", state.radius()),
+                    String.format(java.util.Locale.ROOT, "%.1f", state.mass()),
+                    String.format(java.util.Locale.ROOT, "%.1f", state.radius()),
                     (int) Math.ceil(state.ticksLeft() / 20.0)), false);
         }
     }
@@ -153,6 +164,10 @@ public final class BlackHoleManager {
             if (dist > radius || dist < 1.0e-4) {
                 continue;
             }
+            // The maw feeds upward: things far below the core are left alone.
+            if (entity.getY() < center.y - 2.0) {
+                continue;
+            }
             Vec3d dir = delta.multiply(1.0 / dist);
             // Close things get sucked in faster: factor ranges 0.6 (edge) .. 1.6 (core).
             double proximity = 1.6 - Math.min(dist / radius, 1.0);
@@ -216,7 +231,7 @@ public final class BlackHoleManager {
     private static void ambientVortex(ServerWorld world, ServerPlayerEntity player, BlackHoleState state) {
         Vec3d center = coreOf(player);
         double radius = state.radius();
-        int count = 2 + (int) (state.mass() / 8.0);
+        int count = (int) Math.min(2 + state.mass() / 8.0, 12);
 
         for (int i = 0; i < count; i++) {
             double angle = world.random.nextDouble() * Math.PI * 2.0;

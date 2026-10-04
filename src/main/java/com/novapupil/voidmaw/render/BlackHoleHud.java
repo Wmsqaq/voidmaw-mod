@@ -24,7 +24,8 @@ public final class BlackHoleHud implements HudElement {
         }
         TextRenderer textRenderer = client.textRenderer;
         Text line = Text.translatable("hud.voidmaw.mass",
-                String.format("%.1f", hole.mass()), String.format("%.1f", hole.radius()));
+                String.format(java.util.Locale.ROOT, "%.1f", hole.mass()),
+                String.format(java.util.Locale.ROOT, "%.1f", hole.radius()));
         int x = (context.getScaledWindowWidth() - textRenderer.getWidth(line)) / 2;
         context.drawText(textRenderer, line, x, 8, 0xFFDDB0FF, true);
     }
