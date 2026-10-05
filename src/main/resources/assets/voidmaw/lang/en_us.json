@@ -6,5 +6,6 @@
   "commands.voidmaw.status_active": "Black hole active - mass: %s, pull radius: %s blocks, time left: %ss",
   "commands.voidmaw.status_idle": "No black hole. Use the Singularity Core or /voidmaw start.",
   "commands.voidmaw.already": "The maw is already open. (sneak + use the core to close it)",
+  "commands.voidmaw.gift_received": "You received a Singularity Core - right-click it to become the black hole. (sneak + use to close)",
   "hud.voidmaw.mass": "Mass %s | Radius %s blocks"
 }

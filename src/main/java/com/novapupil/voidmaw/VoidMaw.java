@@ -2,6 +2,7 @@ package com.novapupil.voidmaw;
 
 import com.novapupil.voidmaw.blackhole.BlackHoleManager;
 import com.novapupil.voidmaw.command.VoidMawCommand;
+import com.novapupil.voidmaw.item.CoreGift;
 import com.novapupil.voidmaw.item.ModItems;
 import com.novapupil.voidmaw.net.MassSyncPayload;
 import net.fabricmc.api.ModInitializer;
@@ -23,6 +24,9 @@ public class VoidMaw implements ModInitializer {
         ModItems.register();
         PayloadTypeRegistry.playS2C().register(MassSyncPayload.ID, MassSyncPayload.CODEC);
         ServerTickEvents.END_SERVER_TICK.register(BlackHoleManager::tick);
+        // One Singularity Core per player, on their first join into this world.
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
+                CoreGift.onJoin(handler.getPlayer()));
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
                 BlackHoleManager.onDisconnect(handler.getPlayer()));
         // Death forces the maw shut, releasing the stored mass.

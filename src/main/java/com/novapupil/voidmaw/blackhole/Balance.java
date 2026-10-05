@@ -35,6 +35,9 @@ public final class Balance {
     public static final float EXPLOSION_PER_MASS = 0.1f;
     public static final float EXPLOSION_CAP = 6.0f;
 
+    /** Hand every player one Singularity Core the first time they enter the world. */
+    public static final boolean GIVE_CORE_ON_FIRST_JOIN = true;
+
     public static double radiusFor(double mass) {
         return Math.min(BASE_RADIUS + Math.sqrt(mass) * RADIUS_PER_SQRT_MASS, MAX_RADIUS);
     }

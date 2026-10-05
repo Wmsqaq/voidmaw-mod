@@ -6,5 +6,6 @@
   "commands.voidmaw.status_active": "黑洞运行中 —— 质量：%s，引力半径：%s 格，剩余时间：%s 秒",
   "commands.voidmaw.status_idle": "当前没有黑洞。使用奇点核心或 /voidmaw start。",
   "commands.voidmaw.already": "虚空之喉已经张开。（潜行 + 使用核心关闭）",
+  "commands.voidmaw.gift_received": "获得「奇点核心」——右键使用即可化身黑洞。（潜行 + 使用可关闭）",
   "hud.voidmaw.mass": "质量 %s | 半径 %s 格"
 }
