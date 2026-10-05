@@ -8,7 +8,7 @@ import net.minecraft.client.render.RenderTickCounter;
 import net.minecraft.text.Text;
 
 /**
- * Small centered readout of mass and radius while the local player is the maw.
+ * Centered readout of level, mass and pit radius while the local player is the maw.
  */
 public final class BlackHoleHud implements HudElement {
 
@@ -24,6 +24,7 @@ public final class BlackHoleHud implements HudElement {
         }
         TextRenderer textRenderer = client.textRenderer;
         Text line = Text.translatable("hud.voidmaw.mass",
+                hole.level(),
                 String.format(java.util.Locale.ROOT, "%.1f", hole.mass()),
                 String.format(java.util.Locale.ROOT, "%.1f", hole.radius()));
         int x = (context.getScaledWindowWidth() - textRenderer.getWidth(line)) / 2;

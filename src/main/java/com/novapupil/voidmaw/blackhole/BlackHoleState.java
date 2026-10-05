@@ -1,11 +1,18 @@
 package com.novapupil.voidmaw.blackhole;
 
+import net.minecraft.entity.FallingBlockEntity;
+
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Per-player black hole state. Mass feeds both size and remaining time.
+ * Per-player black hole state: mass, absorption level and blocks still tumbling into the pit.
  */
 public final class BlackHoleState {
     private double mass;
     private int ticksLeft;
+    private int level = HoleLevel.MIN;
+    private final List<FallingBlockEntity> pendingBlocks = new ArrayList<>();
 
     BlackHoleState() {
         this.ticksLeft = Balance.BASE_DURATION_TICKS;
@@ -15,12 +22,20 @@ public final class BlackHoleState {
         return mass;
     }
 
-    public double radius() {
-        return Balance.radiusFor(mass);
+    public int level() {
+        return level;
+    }
+
+    void setLevel(int level) {
+        this.level = level;
     }
 
     public int ticksLeft() {
         return ticksLeft;
+    }
+
+    public List<FallingBlockEntity> pendingBlocks() {
+        return pendingBlocks;
     }
 
     void addMass(double amount) {

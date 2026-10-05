@@ -1,11 +1,14 @@
 {
   "item.voidmaw.singularity_core": "Singularity Core",
-  "commands.voidmaw.started": "The Void Maw opens... You are the black hole now. (sneak + use the core again to close it)",
-  "commands.voidmaw.stopped": "The Void Maw snaps shut. Mass released: %s",
+  "commands.voidmaw.started": "The Void Maw opens beneath you... You are the black hole now. Right-click again to close it quietly, sneak + right-click to DETONATE.",
+  "commands.voidmaw.stopped": "The maw closed quietly. Mass: %s",
+  "commands.voidmaw.detonated": "DETONATION! The Lv.%s maw released everything with power %s!",
+  "commands.voidmaw.levelup": "The maw grew to Lv.%s! Pull radius %s blocks.",
   "commands.voidmaw.not_active": "You are not a black hole.",
-  "commands.voidmaw.status_active": "Black hole active - mass: %s, pull radius: %s blocks, time left: %ss",
+  "commands.voidmaw.status_active": "Black hole active - Lv.%s · mass: %s · radius: %s blocks · time left: %ss",
   "commands.voidmaw.status_idle": "No black hole. Use the Singularity Core or /voidmaw start.",
-  "commands.voidmaw.already": "The maw is already open. (sneak + use the core to close it)",
-  "commands.voidmaw.gift_received": "You received a Singularity Core - right-click it to become the black hole. (sneak + use to close)",
-  "hud.voidmaw.mass": "Mass %s | Radius %s blocks"
+  "commands.voidmaw.already": "The maw is already open. (right-click again to close, sneak + right-click to detonate)",
+  "commands.voidmaw.gift_received": "You received a Singularity Core - right-click it to become the black hole. /voidmaw warehouse opens your storage.",
+  "container.voidmaw.warehouse": "Black Hole Warehouse",
+  "hud.voidmaw.mass": "Lv.%s | Mass %s | Radius %s blocks"
 }

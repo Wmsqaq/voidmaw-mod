@@ -1,11 +1,14 @@
 {
   "item.voidmaw.singularity_core": "奇点核心",
-  "commands.voidmaw.started": "虚空之喉张开……你现在就是黑洞。（再次潜行使用核心可关闭）",
-  "commands.voidmaw.stopped": "虚空之喉猛然闭合！释放质量：%s",
+  "commands.voidmaw.started": "虚空之喉在你脚下张开……你现在就是黑洞。右键再次使用可安静闭合，Shift+右键自爆。",
+  "commands.voidmaw.stopped": "虚空之喉安静地闭合了。质量：%s",
+  "commands.voidmaw.detonated": "自爆！Lv.%s 黑洞以威力 %s 释放了全部质量！",
+  "commands.voidmaw.levelup": "黑洞成长至 Lv.%s！引力半径 %s 格",
   "commands.voidmaw.not_active": "你目前不是黑洞。",
-  "commands.voidmaw.status_active": "黑洞运行中 —— 质量：%s，引力半径：%s 格，剩余时间：%s 秒",
+  "commands.voidmaw.status_active": "黑洞运行中 —— Lv.%s · 质量：%s · 半径：%s 格 · 剩余时间：%s 秒",
   "commands.voidmaw.status_idle": "当前没有黑洞。使用奇点核心或 /voidmaw start。",
-  "commands.voidmaw.already": "虚空之喉已经张开。（潜行 + 使用核心关闭）",
-  "commands.voidmaw.gift_received": "获得「奇点核心」——右键使用即可化身黑洞。（潜行 + 使用可关闭）",
-  "hud.voidmaw.mass": "质量 %s | 半径 %s 格"
+  "commands.voidmaw.already": "虚空之喉已经张开。（右键安静闭合，Shift+右键自爆）",
+  "commands.voidmaw.gift_received": "获得「奇点核心」——右键使用即可化身黑洞。/voidmaw warehouse 打开黑洞仓库。",
+  "container.voidmaw.warehouse": "黑洞仓库",
+  "hud.voidmaw.mass": "Lv.%s · 质量 %s · 半径 %s 格"
 }

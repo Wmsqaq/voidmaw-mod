@@ -26,25 +26,9 @@ public final class Balance {
     /** Block devouring: random sample attempts every other tick. */
     public static final int BASE_BLOCK_ATTEMPTS = 2;
     public static final int MAX_BLOCK_ATTEMPTS = 10;
-    /** Mass required before the maw can chew blocks harder than 10 (obsidian & co). */
-    public static final double HARD_BLOCK_MASS_GATE = 30.0;
-    public static final float HARD_BLOCK_HARDNESS = 10.0f;
-
-    /** End-of-transformation energy release. */
-    public static final float EXPLOSION_BASE = 2.0f;
-    public static final float EXPLOSION_PER_MASS = 0.1f;
-    public static final float EXPLOSION_CAP = 6.0f;
 
     /** Hand every player one Singularity Core the first time they enter the world. */
     public static final boolean GIVE_CORE_ON_FIRST_JOIN = true;
-
-    public static double radiusFor(double mass) {
-        return Math.min(BASE_RADIUS + Math.sqrt(mass) * RADIUS_PER_SQRT_MASS, MAX_RADIUS);
-    }
-
-    public static float explosionPowerFor(double mass) {
-        return (float) Math.min(EXPLOSION_BASE + mass * EXPLOSION_PER_MASS, EXPLOSION_CAP);
-    }
 
     public static double pullStrengthFor(double mass) {
         return PULL_BASE + Math.sqrt(mass) * PULL_PER_SQRT_MASS;

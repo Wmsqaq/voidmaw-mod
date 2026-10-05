@@ -10,7 +10,9 @@ import net.minecraft.util.Hand;
 import net.minecraft.world.World;
 
 /**
- * Right-click opens the maw; sneak + right-click snaps it shut (releasing the mass).
+ * Right-click opens the maw and right-click again closes it quietly.
+ * Sneak + right-click is the ONLY detonation - releasing the stored mass
+ * as a level-scaled explosion.
  */
 public class SingularityCoreItem extends Item {
 
@@ -32,7 +34,7 @@ public class SingularityCoreItem extends Item {
                     BlackHoleManager.sendStatus(player);
                 }
             } else if (BlackHoleManager.isActive(player)) {
-                player.sendMessage(BlackHoleManager.ALREADY_OPEN, false);
+                BlackHoleManager.stop(player, false);
             } else {
                 BlackHoleManager.start(player);
             }

@@ -18,16 +18,15 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Client side of the maw: draws the growing black sphere, hides the host's model,
- * and keeps per-player hole state fresh from server syncs.
+ * Client side of the maw: the pit itself is carved by the server, so the client draws
+ * a small "event horizon" core resting at the pit floor and hides the host's model.
  */
 public final class BlackHoleRenderer {
     /** Hole states stop being drawn if the server stays silent for this long. */
     private static final long STALE_AFTER_MS = 5000;
-    private static final float CORE_RGB_SCALE = 1.0f;
     private static final Map<UUID, Hole> HOLES = new HashMap<>();
 
-    public record Hole(double mass, double radius, long updatedAt) {
+    public record Hole(int level, double mass, double radius, long updatedAt) {
     }
 
     private BlackHoleRenderer() {
@@ -35,8 +34,8 @@ public final class BlackHoleRenderer {
 
     public static void updateState(MassSyncPayload payload) {
         if (payload.active()) {
-            HOLES.put(payload.playerId(),
-                    new Hole(payload.mass(), payload.radius(), System.currentTimeMillis()));
+            HOLES.put(payload.playerId(), new Hole(payload.level(), payload.mass(),
+                    payload.radius(), System.currentTimeMillis()));
         } else {
             HOLES.remove(payload.playerId());
             MinecraftClient client = MinecraftClient.getInstance();
@@ -103,10 +102,12 @@ public final class BlackHoleRenderer {
             if (entity == null) {
                 continue;
             }
-            double radius = entry.getValue().radius() * 0.45;
+            Hole hole = entry.getValue();
+            double radius = 0.4 + hole.level() * 0.22;
             // Subtle pulse so the horizon feels alive.
             radius *= 1.0 + 0.03 * Math.sin(now / 300.0);
-            Vec3d center = new Vec3d(entity.getX(), entity.getY() + 1.0, entity.getZ());
+            // The core rests on the pit floor beneath the host's feet.
+            Vec3d center = new Vec3d(entity.getX(), entity.getY() - 0.5 - hole.level(), entity.getZ());
             drawSphere(consumer, matrix, center, radius);
         }
 
@@ -141,7 +142,6 @@ public final class BlackHoleRenderer {
         float x = (float) (center.x + radius * Math.sin(theta) * Math.cos(phi));
         float y = (float) (center.y + radius * Math.cos(theta));
         float z = (float) (center.z + radius * Math.sin(theta) * Math.sin(phi));
-        consumer.vertex(matrix, x, y, z).color(
-                (int) (5 * CORE_RGB_SCALE), (int) (2 * CORE_RGB_SCALE), (int) (10 * CORE_RGB_SCALE), 255);
+        consumer.vertex(matrix, x, y, z).color(5, 2, 10, 255);
     }
 }

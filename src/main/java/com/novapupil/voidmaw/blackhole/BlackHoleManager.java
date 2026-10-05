@@ -1,13 +1,18 @@
 package com.novapupil.voidmaw.blackhole;
 
 import com.novapupil.voidmaw.net.MassSyncPayload;
+import com.novapupil.voidmaw.warehouse.BlackHoleWarehouse;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.FallingBlockEntity;
+import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.ItemStack;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -22,12 +27,18 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * Server-side brain of the black hole: suction, devouring, growth and the closing burst.
+ * Server-side brain of the maw, Hole.io style.
+ *
+ * Geometry: the hole sits at the player's feet and only feeds on things ABOVE it -
+ * the pit floor lies a little below the feet and deepens with each level. Blocks torn
+ * from the pit tumble in as falling blocks and are digested at the bottom; entities are
+ * dragged over the rim and devoured there. All loot ends up in the owner's warehouse.
  */
 public final class BlackHoleManager {
     public static final Text ALREADY_OPEN = Text.translatable("commands.voidmaw.already");
@@ -53,40 +64,48 @@ public final class BlackHoleManager {
         sync(player);
     }
 
-    public static void stop(ServerPlayerEntity player, boolean withBurst) {
+    /**
+     * Closes the maw. Only {@code detonate} releases the stored mass as a
+     * level-scaled explosion; quiet closes (right-click, timeout, death) do not.
+     */
+    public static void stop(ServerPlayerEntity player, boolean detonate) {
         BlackHoleState state = ACTIVE.remove(player.getUuid());
         if (state == null) {
             return;
         }
         ServerWorld world = world(player);
         double mass = state.mass();
+        int level = HoleLevel.levelFor(mass);
 
         player.removeStatusEffect(StatusEffects.SLOW_FALLING);
         player.removeStatusEffect(StatusEffects.SLOWNESS);
 
-        if (withBurst && mass > 0.0) {
-            // Short immunity so the closing maw does not instantly kill its former host.
+        if (detonate) {
+            // Short immunity so the blast does not instantly kill its former host.
             player.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 60, 4, true, false));
             player.addStatusEffect(new StatusEffectInstance(StatusEffects.FIRE_RESISTANCE, 60, 0, true, false));
-            world.createExplosion(player, player.getX(), player.getY() + 1.0, player.getZ(),
-                    Balance.explosionPowerFor(mass), World.ExplosionSourceType.MOB);
+            float power = HoleLevel.explosionPowerFor(level);
+            world.createExplosion(player, player.getX(), player.getY(), player.getZ(),
+                    power, World.ExplosionSourceType.MOB);
             world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_GENERIC_EXPLODE.value(),
                     SoundCategory.PLAYERS, 2.0f, 0.8f);
             world.spawnParticles(ParticleTypes.EXPLOSION_EMITTER,
-                    player.getX(), player.getY() + 1.0, player.getZ(), 1, 0.0, 0.0, 0.0, 0.0);
+                    player.getX(), player.getY(), player.getZ(), 1, 0.0, 0.0, 0.0, 0.0);
+            player.sendMessage(Text.translatable("commands.voidmaw.detonated",
+                    level, String.format(java.util.Locale.ROOT, "%.0f", power)), false);
         } else {
             world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT,
                     SoundCategory.PLAYERS, 0.8f, 0.5f);
+            player.sendMessage(Text.translatable("commands.voidmaw.stopped",
+                    String.format(java.util.Locale.ROOT, "%.1f", mass)), false);
         }
-        player.sendMessage(Text.translatable("commands.voidmaw.stopped",
-                String.format(java.util.Locale.ROOT, "%.1f", mass)), false);
         sync(player);
     }
 
-    /** The maw collapses violently when its host dies. */
+    /** The maw quietly snaps shut when its host dies - only shift+use detonates. */
     public static void onDeath(ServerPlayerEntity player) {
         if (ACTIVE.containsKey(player.getUuid())) {
-            stop(player, true);
+            stop(player, false);
         }
     }
 
@@ -95,9 +114,11 @@ public final class BlackHoleManager {
         if (state == null) {
             player.sendMessage(Text.translatable("commands.voidmaw.status_idle"), false);
         } else {
+            int level = HoleLevel.levelFor(state.mass());
             player.sendMessage(Text.translatable("commands.voidmaw.status_active",
+                    level,
                     String.format(java.util.Locale.ROOT, "%.1f", state.mass()),
-                    String.format(java.util.Locale.ROOT, "%.1f", state.radius()),
+                    String.format(java.util.Locale.ROOT, "%.1f", HoleLevel.radiusFor(level)),
                     (int) Math.ceil(state.ticksLeft() / 20.0)), false);
         }
     }
@@ -106,16 +127,15 @@ public final class BlackHoleManager {
         if (ACTIVE.remove(player.getUuid()) == null) {
             return;
         }
-        // Quietly close the maw: no burst at the logout spot, but viewers must be told.
-        MassSyncPayload payload = new MassSyncPayload(player.getUuid(), false, 0.0, 0.0);
+        MassSyncPayload payload = new MassSyncPayload(player.getUuid(), false, 0, 0.0, 0.0);
         for (ServerPlayerEntity watcher : PlayerLookup.tracking(player)) {
             ServerPlayNetworking.send(watcher, payload);
         }
     }
 
     public static void tick(MinecraftServer server) {
-        if (ACTIVE.isEmpty()) {
-            return;
+        if (!ACTIVE.isEmpty() && server.getTicks() % 40 == 0) {
+            BlackHoleWarehouse.flushAll();
         }
         for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
             BlackHoleState state = ACTIVE.get(player.getUuid());
@@ -124,7 +144,7 @@ public final class BlackHoleManager {
             }
             state.tick();
             if (state.expired()) {
-                stop(player, true);
+                stop(player, false);
                 continue;
             }
 
@@ -133,57 +153,96 @@ public final class BlackHoleManager {
             player.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, 60, 0, true, false));
 
             ServerWorld world = (ServerWorld) player.getEntityWorld();
-            suckEntities(world, player, state);
-            if (world.getTime() % 2 == 0) {
-                devourBlocks(world, player, state);
+
+            int level = HoleLevel.levelFor(state.mass());
+            if (level > state.level()) {
+                state.setLevel(level);
+                levelUp(world, player, level);
             }
+
+            double radius = HoleLevel.radiusFor(level);
+            // Pit floor: a little below the feet, deepening with each level.
+            double pitBottom = Math.floor(player.getY()) - 1.0 - level;
+            Vec3d pitCenter = new Vec3d(player.getX(), pitBottom + 0.5, player.getZ());
+
+            suckEntities(world, player, state, level, radius, pitBottom, pitCenter);
             if (world.getTime() % 2 == 0) {
-                ambientVortex(world, player, state);
+                devourBlocks(world, player, state, level, radius, pitBottom, pitCenter);
+                ambientVortex(world, player, state, level, radius);
             }
+            digestPending(world, player, state, pitCenter);
             if (player.age % 10 == 0) {
                 sync(player);
             }
         }
     }
 
-    /** The maw's core sits one block above the host's feet. */
-    private static Vec3d coreOf(Entity entity) {
-        return new Vec3d(entity.getX(), entity.getY() + 1.0, entity.getZ());
+    private static void levelUp(ServerWorld world, ServerPlayerEntity player, int level) {
+        world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PLAYER_LEVELUP,
+                SoundCategory.PLAYERS, 1.0f, 0.8f);
+        world.spawnParticles(ParticleTypes.REVERSE_PORTAL,
+                player.getX(), player.getY() + 1.0, player.getZ(), 30, radiusFor(level) * 0.5, 1.0, radiusFor(level) * 0.5, 0.4);
+        player.sendMessage(Text.translatable("commands.voidmaw.levelup",
+                level, String.format(java.util.Locale.ROOT, "%.1f", HoleLevel.radiusFor(level))), false);
     }
 
-    private static void suckEntities(ServerWorld world, ServerPlayerEntity player, BlackHoleState state) {
-        Vec3d center = coreOf(player);
-        double radius = state.radius();
-        Box box = Box.of(center, radius * 2.0, radius * 2.0, radius * 2.0);
-        List<Entity> victims = world.getOtherEntities(player, box,
-                entity -> entity.isAlive() && !entity.isSpectator() && !(entity instanceof PlayerEntity));
+    private static double radiusFor(int level) {
+        return HoleLevel.radiusFor(level);
+    }
+
+    private static void suckEntities(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
+                                     int level, double radius, double pitBottom, Vec3d pitCenter) {
+        Box box = new Box(
+                player.getX() - radius, pitBottom, player.getZ() - radius,
+                player.getX() + radius, player.getY() + radius * 1.5, player.getZ() + radius);
+        List<Entity> victims = world.getOtherEntities(player, box, entity ->
+                entity.isAlive() && !entity.isSpectator() && !(entity instanceof PlayerEntity)
+                        // Only things above the pit floor can fall into the maw.
+                        && entity.getY() >= pitBottom - 0.5
+                        && fitsInMaw(entity, level));
         double strength = Balance.pullStrengthFor(state.mass());
 
         for (Entity entity : victims) {
-            Vec3d delta = center.subtract(coreOf(entity));
+            Vec3d delta = pitCenter.subtract(coreOf(entity));
             double dist = delta.length();
-            if (dist > radius || dist < 1.0e-4) {
-                continue;
-            }
-            // The maw feeds upward: things far below the core are left alone.
-            if (entity.getY() < center.y - 2.0) {
+            if (dist < 1.0e-4) {
                 continue;
             }
             Vec3d dir = delta.multiply(1.0 / dist);
-            // Close things get sucked in faster: factor ranges 0.6 (edge) .. 1.6 (core).
-            double proximity = 1.6 - Math.min(dist / radius, 1.0);
+            double proximity = 1.6 - Math.min(dist / (radius * 2.0), 1.0);
             double pull = strength * proximity;
             entity.addVelocity(dir.x * pull, dir.y * pull + 0.02 * pull, dir.z * pull);
             entity.velocityModified = true;
 
-            if (entity.squaredDistanceTo(center) <= Balance.DEVOUR_DISTANCE_SQ) {
-                devour(world, state, entity);
+            if (entity.squaredDistanceTo(pitCenter) <= Balance.DEVOUR_DISTANCE_SQ) {
+                devour(world, player, state, pitCenter, entity);
             }
         }
     }
 
-    private static void devour(ServerWorld world, BlackHoleState state, Entity entity) {
+    /** Hole.io rule: the maw only swallows what fits under its current level. */
+    private static boolean fitsInMaw(Entity entity, int level) {
+        if (entity instanceof ItemEntity || entity instanceof net.minecraft.entity.ExperienceOrbEntity) {
+            return true;
+        }
+        Box box = entity.getBoundingBox();
+        double avg = (box.getLengthX() + box.getLengthY() + box.getLengthZ()) / 3.0;
+        return avg <= HoleLevel.maxEntitySizeFor(level);
+    }
+
+    private static void devour(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
+                               Vec3d pitCenter, Entity entity) {
         state.addMass(MassTables.entityMass(entity));
+
+        // Whatever the maw swallows ends up in its owner's warehouse.
+        if (entity instanceof ItemEntity item) {
+            insertOrSpill(world, player, state, pitCenter, item.getStack().copy());
+        } else if (entity instanceof LivingEntity living) {
+            for (ItemStack drop : LootHelper.entityLoot(world, living)) {
+                insertOrSpill(world, player, state, pitCenter, drop);
+            }
+        }
+
         world.spawnParticles(ParticleTypes.POOF,
                 entity.getX(), entity.getY() + entity.getHeight() / 2.0, entity.getZ(), 6, 0.2, 0.2, 0.2, 0.01);
         world.playSound(null, entity.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT,
@@ -191,60 +250,98 @@ public final class BlackHoleManager {
         entity.discard();
     }
 
-    private static void devourBlocks(ServerWorld world, ServerPlayerEntity player, BlackHoleState state) {
-        Vec3d center = coreOf(player);
-        double radius = state.radius();
+    private static void devourBlocks(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
+                                     int level, double radius, double pitBottom, Vec3d pitCenter) {
         int attempts = Balance.blockAttemptsFor(state.mass());
-        int bottom = MathHelper.floor(center.y - 2.0);
-        int top = MathHelper.floor(center.y + radius * 1.2);
+        int bottom = MathHelper.floor(pitBottom);
+        int top = MathHelper.floor(player.getY() + radius * 1.5);
 
         for (int i = 0; i < attempts; i++) {
             double angle = world.random.nextDouble() * Math.PI * 2.0;
             double dist = Math.sqrt(world.random.nextDouble()) * radius;
-            int x = MathHelper.floor(center.x + Math.cos(angle) * dist);
-            int z = MathHelper.floor(center.z + Math.sin(angle) * dist);
+            int x = MathHelper.floor(player.getX() + Math.cos(angle) * dist);
+            int z = MathHelper.floor(player.getZ() + Math.sin(angle) * dist);
 
-            // Column scan from the core outward: whatever sits closest to the maw
-            // gets torn off first, so open terrain opens into a growing crater
-            // instead of the old random sampling that mostly hit air.
+            // Column scan from the pit floor upward: the block nearest the maw tears loose
+            // first. Everything below the pit floor is safe from the maw.
             for (int y = bottom; y <= top; y++) {
-                if (devourBlock(world, player, state, new BlockPos(x, y, z))) {
-                    break;
+                BlockPos pos = new BlockPos(x, y, z);
+                BlockState blockState = world.getBlockState(pos);
+                if (blockState.isAir() || blockState.isIn(MassTables.UNSWALLOWABLE)) {
+                    continue;
                 }
+                if (!blockState.getFluidState().isEmpty()) {
+                    continue;
+                }
+                float hardness = blockState.getHardness(world, pos);
+                if (hardness < 0.0f) {
+                    continue;
+                }
+                if (hardness > HoleLevel.maxBlockHardnessFor(level)) {
+                    continue;
+                }
+
+                // The block tumbles into the pit as a falling block, then gets digested.
+                world.breakBlock(pos, false, player, 512);
+                state.addMass(MassTables.blockMass(blockState, world, pos));
+
+                FallingBlockEntity falling = FallingBlockEntity.spawnFromBlock(world, pos, blockState);
+                falling.dropItem = false;
+                double dx = pitCenter.x - falling.getX();
+                double dz = pitCenter.z - falling.getZ();
+                double horiz = Math.max(Math.hypot(dx, dz), 0.25);
+                double push = Math.min(horiz * 0.08, 0.35);
+                falling.setVelocity(dx / horiz * push, 0.14, dz / horiz * push);
+                world.spawnEntity(falling);
+                state.pendingBlocks().add(falling);
+                world.playSound(null, pos, blockState.getSoundGroup().getBreakSound(),
+                        SoundCategory.BLOCKS, 0.4f, 0.7f);
+                break;
             }
         }
     }
 
-    private static boolean devourBlock(ServerWorld world, ServerPlayerEntity player,
-                                       BlackHoleState state, BlockPos pos) {
-        BlockState blockState = world.getBlockState(pos);
-        if (blockState.isAir() || blockState.isIn(MassTables.UNSWALLOWABLE)) {
-            return false;
+    /** Blocks that reached the pit floor are digested: loot goes to the warehouse. */
+    private static void digestPending(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
+                                      Vec3d pitCenter) {
+        Iterator<FallingBlockEntity> iterator = state.pendingBlocks().iterator();
+        while (iterator.hasNext()) {
+            FallingBlockEntity falling = iterator.next();
+            if (falling.isRemoved()) {
+                iterator.remove();
+                continue;
+            }
+            boolean arrived = falling.squaredDistanceTo(pitCenter) <= 2.25 || falling.timeFalling > 40;
+            if (!arrived) {
+                continue;
+            }
+            iterator.remove();
+            BlockState blockState = falling.getBlockState();
+            for (ItemStack drop : LootHelper.blockLoot(world, blockState, falling.getBlockPos())) {
+                insertOrSpill(world, player, state, pitCenter, drop);
+            }
+            world.spawnParticles(ParticleTypes.CLOUD,
+                    pitCenter.x, pitCenter.y + 0.5, pitCenter.z, 3, 0.3, 0.1, 0.3, 0.01);
+            falling.discard();
         }
-        if (!blockState.getFluidState().isEmpty()) {
-            return false;
-        }
-        float hardness = blockState.getHardness(world, pos);
-        if (hardness < 0.0f) {
-            return false;
-        }
-        if (hardness > Balance.HARD_BLOCK_HARDNESS && state.mass() < Balance.HARD_BLOCK_MASS_GATE) {
-            return false;
-        }
-
-        double gained = MassTables.blockMass(blockState, world, pos);
-        world.breakBlock(pos, false, player, 512);
-        state.addMass(gained);
-        world.spawnParticles(ParticleTypes.LARGE_SMOKE,
-                pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, 4, 0.2, 0.2, 0.2, 0.01);
-        world.playSound(null, pos, blockState.getSoundGroup().getBreakSound(), SoundCategory.BLOCKS, 0.4f, 0.7f);
-        return true;
     }
 
-    /** Accretion shimmer: server-side particles swirl around the maw for every viewer. */
-    private static void ambientVortex(ServerWorld world, ServerPlayerEntity player, BlackHoleState state) {
+    /** Puts a stack into the owner's warehouse; overflow is converted into mass. */
+    private static void insertOrSpill(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
+                                      Vec3d pitCenter, ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return;
+        }
+        ItemStack leftover = BlackHoleWarehouse.get(world.getServer(), player.getUuid()).insert(stack);
+        if (!leftover.isEmpty()) {
+            state.addMass(0.2);
+        }
+    }
+
+    /** Accretion shimmer above the pit, for every viewer. */
+    private static void ambientVortex(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
+                                      int level, double radius) {
         Vec3d center = coreOf(player);
-        double radius = state.radius();
         int count = (int) Math.min(2 + state.mass() / 8.0, 12);
 
         for (int i = 0; i < count; i++) {
@@ -252,7 +349,7 @@ public final class BlackHoleManager {
             double dist = radius * (0.45 + world.random.nextDouble() * 0.75);
             double x = center.x + Math.cos(angle) * dist;
             double z = center.z + Math.sin(angle) * dist;
-            double y = center.y + (world.random.nextDouble() - 0.3) * radius * 0.8;
+            double y = center.y + world.random.nextDouble() * radius;
             world.spawnParticles(ParticleTypes.PORTAL, x, y, z, 1, 0.08, -0.04, 0.08, 0.15);
         }
         if (world.random.nextInt(3) == 0) {
@@ -265,14 +362,20 @@ public final class BlackHoleManager {
     private static void sync(ServerPlayerEntity player) {
         BlackHoleState state = ACTIVE.get(player.getUuid());
         boolean active = state != null;
-        MassSyncPayload payload = new MassSyncPayload(player.getUuid(), active,
-                active ? state.mass() : 0.0, active ? state.radius() : 0.0);
+        int level = active ? HoleLevel.levelFor(state.mass()) : 0;
+        MassSyncPayload payload = new MassSyncPayload(player.getUuid(), active, level,
+                active ? state.mass() : 0.0, active ? HoleLevel.radiusFor(Math.max(level, 1)) : 0.0);
         ServerPlayNetworking.send(player, payload);
         for (ServerPlayerEntity watcher : PlayerLookup.tracking(player)) {
             if (!watcher.getUuid().equals(player.getUuid())) {
                 ServerPlayNetworking.send(watcher, payload);
             }
         }
+    }
+
+    /** The maw's core sits at the player's feet. */
+    private static Vec3d coreOf(Entity entity) {
+        return new Vec3d(entity.getX(), entity.getY(), entity.getZ());
     }
 
     private static ServerWorld world(ServerPlayerEntity player) {
