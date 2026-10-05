@@ -23,9 +23,9 @@ public final class Balance {
     /** Anything whose distance squared to the core is below this gets swallowed. */
     public static final double DEVOUR_DISTANCE_SQ = 1.4 * 1.4;
 
-    /** Block devouring: random sample attempts every other tick. */
-    public static final int BASE_BLOCK_ATTEMPTS = 2;
-    public static final int MAX_BLOCK_ATTEMPTS = 10;
+    /** Block devouring: random column samples every few ticks. */
+    public static final int BASE_BLOCK_ATTEMPTS = 1;
+    public static final int MAX_BLOCK_ATTEMPTS = 8;
 
     /** Hand every player one Singularity Core the first time they enter the world. */
     public static final boolean GIVE_CORE_ON_FIRST_JOIN = true;
@@ -35,6 +35,6 @@ public final class Balance {
     }
 
     public static int blockAttemptsFor(double mass) {
-        return (int) Math.min(BASE_BLOCK_ATTEMPTS + mass / 20.0, MAX_BLOCK_ATTEMPTS);
+        return (int) Math.min(BASE_BLOCK_ATTEMPTS + mass / 25.0, MAX_BLOCK_ATTEMPTS);
     }
 }

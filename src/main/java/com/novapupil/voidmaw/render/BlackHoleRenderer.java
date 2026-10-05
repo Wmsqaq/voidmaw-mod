@@ -18,15 +18,16 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Client side of the maw: the pit itself is carved by the server, so the client draws
- * a small "event horizon" core resting at the pit floor and hides the host's model.
+ * Client side of the maw: draws a FLAT black disc lying on the ground at the pit
+ * mouth (Hole.io look) - the actual pit is carved by the server. Also hides the
+ * host's model and keeps per-player hole state fresh from server syncs.
  */
 public final class BlackHoleRenderer {
     /** Hole states stop being drawn if the server stays silent for this long. */
     private static final long STALE_AFTER_MS = 5000;
     private static final Map<UUID, Hole> HOLES = new HashMap<>();
 
-    public record Hole(int level, double mass, double radius, long updatedAt) {
+    public record Hole(int level, double mass, double radius, double mouthY, long updatedAt) {
     }
 
     private BlackHoleRenderer() {
@@ -35,7 +36,7 @@ public final class BlackHoleRenderer {
     public static void updateState(MassSyncPayload payload) {
         if (payload.active()) {
             HOLES.put(payload.playerId(), new Hole(payload.level(), payload.mass(),
-                    payload.radius(), System.currentTimeMillis()));
+                    payload.radius(), payload.mouthY(), System.currentTimeMillis()));
         } else {
             HOLES.remove(payload.playerId());
             MinecraftClient client = MinecraftClient.getInstance();
@@ -95,7 +96,7 @@ public final class BlackHoleRenderer {
         matrices.translate(-camera.x, -camera.y, -camera.z);
         Matrix4f matrix = matrices.peek().getPositionMatrix();
 
-        VertexConsumer consumer = consumers.getBuffer(RenderLayer.getDebugQuads());
+        VertexConsumer consumer = consumers.getBuffer(RenderLayer.getDebugTriangleFan());
         long now = System.currentTimeMillis();
         for (Map.Entry<UUID, Hole> entry : HOLES.entrySet()) {
             Entity entity = client.world.getEntity(entry.getKey());
@@ -103,45 +104,34 @@ public final class BlackHoleRenderer {
                 continue;
             }
             Hole hole = entry.getValue();
-            double radius = 0.4 + hole.level() * 0.22;
-            // Subtle pulse so the horizon feels alive.
-            radius *= 1.0 + 0.03 * Math.sin(now / 300.0);
-            // The core rests on the pit floor beneath the host's feet.
-            Vec3d center = new Vec3d(entity.getX(), entity.getY() - 0.5 - hole.level(), entity.getZ());
-            drawSphere(consumer, matrix, center, radius);
+            double radius = hole.radius() * (1.0 + 0.02 * Math.sin(now / 300.0));
+            // Flat hole lying on the ground: a dark violet under-layer forms the rim,
+            // the near-black core sits a hair above it. Sunk slightly below the mouth
+            // plane so terrain edges do not z-fight.
+            Vec3d rim = new Vec3d(entity.getX(), hole.mouthY() - 0.01, entity.getZ());
+            Vec3d core = new Vec3d(entity.getX(), hole.mouthY() - 0.005, entity.getZ());
+            emitDisc(consumer, matrix, rim, radius * 1.10, true, 58, 16, 92);
+            emitDisc(consumer, matrix, rim, radius * 1.10, false, 58, 16, 92);
+            emitDisc(consumer, matrix, core, radius, true, 4, 2, 8);
+            emitDisc(consumer, matrix, core, radius, false, 4, 2, 8);
         }
 
         matrices.pop();
         consumers.drawCurrentLayer();
     }
 
-    private static void drawSphere(VertexConsumer consumer, Matrix4f matrix, Vec3d center, double radius) {
-        int rings = 7;
-        int sectors = 14;
-        for (int i = 0; i < rings; i++) {
-            double theta1 = Math.PI * i / rings;
-            double theta2 = Math.PI * (i + 1) / rings;
-            for (int j = 0; j < sectors; j++) {
-                double phi1 = 2.0 * Math.PI * j / sectors;
-                double phi2 = 2.0 * Math.PI * (j + 1) / sectors;
-                vertex(consumer, matrix, center, radius, theta1, phi1);
-                vertex(consumer, matrix, center, radius, theta2, phi1);
-                vertex(consumer, matrix, center, radius, theta2, phi2);
-                vertex(consumer, matrix, center, radius, theta1, phi2);
-                // Same quad with reversed winding: the sphere stays visible regardless of cull state.
-                vertex(consumer, matrix, center, radius, theta1, phi2);
-                vertex(consumer, matrix, center, radius, theta2, phi2);
-                vertex(consumer, matrix, center, radius, theta2, phi1);
-                vertex(consumer, matrix, center, radius, theta1, phi1);
-            }
+    /** Emits one flat disc as a triangle fan (center + ring); pass both windings. */
+    private static void emitDisc(VertexConsumer consumer, Matrix4f matrix, Vec3d center,
+                                 double radius, boolean reverse, int r, int g, int b) {
+        consumer.vertex(matrix, (float) center.x, (float) center.y, (float) center.z).color(r, g, b, 255);
+        int segments = Math.max(12, (int) (radius * 6));
+        for (int i = 0; i <= segments; i++) {
+            int index = reverse ? segments - i : i;
+            double phi = Math.PI * 2.0 * index / segments;
+            consumer.vertex(matrix,
+                    (float) (center.x + radius * Math.cos(phi)),
+                    (float) center.y,
+                    (float) (center.z + radius * Math.sin(phi))).color(r, g, b, 255);
         }
-    }
-
-    private static void vertex(VertexConsumer consumer, Matrix4f matrix, Vec3d center,
-                               double radius, double theta, double phi) {
-        float x = (float) (center.x + radius * Math.sin(theta) * Math.cos(phi));
-        float y = (float) (center.y + radius * Math.cos(theta));
-        float z = (float) (center.z + radius * Math.sin(theta) * Math.sin(phi));
-        consumer.vertex(matrix, x, y, z).color(5, 2, 10, 255);
     }
 }

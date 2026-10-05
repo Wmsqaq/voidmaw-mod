@@ -50,6 +50,6 @@ public final class MassTables {
         if (hardness <= 0.0f) {
             return 0.2;
         }
-        return 1.0 + hardness * 0.4;
+        return 0.4 + hardness * 0.25;
     }
 }
