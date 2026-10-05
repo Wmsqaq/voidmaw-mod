@@ -298,19 +298,18 @@ public final class BlackHoleManager {
         int bottom = MathHelper.floor(pitBottom);
         int top = MathHelper.floor(mouth) + 1;
 
-        // Attempt 0 is always the column right under the feet so the hole follows
-        // seamlessly; the rest sweep the disc evenly (golden angle) instead of clumping.
-        for (int i = 0; i <= attempts; i++) {
-            final int x;
-            final int z;
-            if (i == 0) {
-                x = player.getBlockX();
-                z = player.getBlockZ();
-            } else {
-                double angle = state.nextSweepAngle();
-                double dist = Math.sqrt(world.random.nextDouble()) * radius;
-                x = MathHelper.floor(player.getX() + Math.cos(angle) * dist);
-                z = MathHelper.floor(player.getZ() + Math.sin(angle) * dist);
+        // The maw eats the ring AROUND the player but never the column under their
+        // own feet - walking never sinks you. Samples sweep the disc evenly instead
+        // of clumping (golden angle).
+        for (int i = 0; i < attempts; i++) {
+            double angle = state.nextSweepAngle();
+            double dist = Math.sqrt(world.random.nextDouble()) * radius;
+            int x = MathHelper.floor(player.getX() + Math.cos(angle) * dist);
+            int z = MathHelper.floor(player.getZ() + Math.sin(angle) * dist);
+            double footingDx = x + 0.5 - player.getX();
+            double footingDz = z + 0.5 - player.getZ();
+            if (footingDx * footingDx + footingDz * footingDz < 2.0) {
+                continue;
             }
 
             // Column scan from the pit floor up to just above the mouth: the block
