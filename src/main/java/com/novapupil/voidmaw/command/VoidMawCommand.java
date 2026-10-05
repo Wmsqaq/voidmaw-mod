@@ -3,8 +3,7 @@ package com.novapupil.voidmaw.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.novapupil.voidmaw.blackhole.BlackHoleManager;
 import com.novapupil.voidmaw.warehouse.BlackHoleWarehouse;
-import com.novapupil.voidmaw.warehouse.WarehouseInventory;
-import net.minecraft.screen.GenericContainerScreenHandler;
+import com.novapupil.voidmaw.warehouse.WarehouseScreenHandler;
 import net.minecraft.screen.SimpleNamedScreenHandlerFactory;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
@@ -50,8 +49,7 @@ public final class VoidMawCommand {
         BlackHoleWarehouse warehouse = BlackHoleWarehouse.get(
                 ((ServerWorld) player.getEntityWorld()).getServer(), player.getUuid());
         player.openHandledScreen(new SimpleNamedScreenHandlerFactory(
-                (syncId, inventory, p) -> GenericContainerScreenHandler.createGeneric9x6(
-                        syncId, inventory, new WarehouseInventory(warehouse)),
+                (syncId, inventory, p) -> new WarehouseScreenHandler(syncId, inventory, warehouse),
                 Text.translatable("container.voidmaw.warehouse")));
     }
 }

@@ -7,25 +7,30 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.util.collection.DefaultedList;
 
 /**
- * Inventory adapter that exposes one player's black hole warehouse to a chest UI.
+ * Inventory adapter exposing one PAGE of a black hole warehouse to a chest UI.
+ * The handler swaps the viewed page via {@link #setView(DefaultedList)}.
  */
 public class WarehouseInventory implements Inventory {
     private final BlackHoleWarehouse warehouse;
-    private final DefaultedList<ItemStack> stacks;
+    private DefaultedList<ItemStack> view;
 
-    public WarehouseInventory(BlackHoleWarehouse warehouse) {
+    public WarehouseInventory(BlackHoleWarehouse warehouse, DefaultedList<ItemStack> view) {
         this.warehouse = warehouse;
-        this.stacks = warehouse.stacks();
+        this.view = view;
+    }
+
+    public void setView(DefaultedList<ItemStack> view) {
+        this.view = view;
     }
 
     @Override
     public int size() {
-        return stacks.size();
+        return view.size();
     }
 
     @Override
     public boolean isEmpty() {
-        for (ItemStack stack : stacks) {
+        for (ItemStack stack : view) {
             if (!stack.isEmpty()) {
                 return false;
             }
@@ -35,12 +40,12 @@ public class WarehouseInventory implements Inventory {
 
     @Override
     public ItemStack getStack(int slot) {
-        return stacks.get(slot);
+        return view.get(slot);
     }
 
     @Override
     public ItemStack removeStack(int slot, int amount) {
-        ItemStack removed = Inventories.splitStack(stacks, slot, amount);
+        ItemStack removed = Inventories.splitStack(view, slot, amount);
         if (!removed.isEmpty()) {
             markDirty();
         }
@@ -49,7 +54,7 @@ public class WarehouseInventory implements Inventory {
 
     @Override
     public ItemStack removeStack(int slot) {
-        ItemStack removed = Inventories.removeStack(stacks, slot);
+        ItemStack removed = Inventories.removeStack(view, slot);
         if (!removed.isEmpty()) {
             markDirty();
         }
@@ -58,7 +63,7 @@ public class WarehouseInventory implements Inventory {
 
     @Override
     public void setStack(int slot, ItemStack stack) {
-        stacks.set(slot, stack);
+        view.set(slot, stack);
         markDirty();
     }
 
@@ -74,7 +79,9 @@ public class WarehouseInventory implements Inventory {
 
     @Override
     public void clear() {
-        stacks.clear();
+        for (int i = 0; i < view.size(); i++) {
+            view.set(i, ItemStack.EMPTY);
+        }
         markDirty();
     }
 }

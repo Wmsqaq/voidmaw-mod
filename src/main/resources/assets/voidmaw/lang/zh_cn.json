@@ -10,5 +10,8 @@
   "commands.voidmaw.already": "虚空之喉已经张开。（右键安静闭合，Shift+右键自爆）",
   "commands.voidmaw.gift_received": "获得「奇点核心」——右键使用即可化身黑洞。/voidmaw warehouse 打开黑洞仓库。",
   "container.voidmaw.warehouse": "黑洞仓库",
+  "container.voidmaw.page": "§e第 %s / %s 页",
+  "container.voidmaw.prev": "§a◀ 上一页",
+  "container.voidmaw.next": "§a下一页 ▶",
   "hud.voidmaw.mass": "Lv.%s · 质量 %s · 半径 %s 格"
 }

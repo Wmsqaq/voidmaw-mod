@@ -10,5 +10,8 @@
   "commands.voidmaw.already": "The maw is already open. (right-click again to close, sneak + right-click to detonate)",
   "commands.voidmaw.gift_received": "You received a Singularity Core - right-click it to become the black hole. /voidmaw warehouse opens your storage.",
   "container.voidmaw.warehouse": "Black Hole Warehouse",
+  "container.voidmaw.page": "§ePage %s / %s",
+  "container.voidmaw.prev": "§a◀ Previous page",
+  "container.voidmaw.next": "§aNext page ▶",
   "hud.voidmaw.mass": "Lv.%s | Mass %s | Radius %s blocks"
 }
