@@ -17,6 +17,7 @@ import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
@@ -194,37 +195,50 @@ public final class BlackHoleManager {
         Vec3d center = coreOf(player);
         double radius = state.radius();
         int attempts = Balance.blockAttemptsFor(state.mass());
+        int bottom = MathHelper.floor(center.y - 2.0);
+        int top = MathHelper.floor(center.y + radius * 1.2);
 
         for (int i = 0; i < attempts; i++) {
             double angle = world.random.nextDouble() * Math.PI * 2.0;
             double dist = Math.sqrt(world.random.nextDouble()) * radius;
-            double x = center.x + Math.cos(angle) * dist;
-            double z = center.z + Math.sin(angle) * dist;
-            double y = center.y + world.random.nextDouble() * radius * 1.5;
-            BlockPos pos = BlockPos.ofFloored(x, y, z);
+            int x = MathHelper.floor(center.x + Math.cos(angle) * dist);
+            int z = MathHelper.floor(center.z + Math.sin(angle) * dist);
 
-            BlockState blockState = world.getBlockState(pos);
-            if (blockState.isAir() || blockState.isIn(MassTables.UNSWALLOWABLE)) {
-                continue;
+            // Column scan from the core outward: whatever sits closest to the maw
+            // gets torn off first, so open terrain opens into a growing crater
+            // instead of the old random sampling that mostly hit air.
+            for (int y = bottom; y <= top; y++) {
+                if (devourBlock(world, player, state, new BlockPos(x, y, z))) {
+                    break;
+                }
             }
-            if (!blockState.getFluidState().isEmpty()) {
-                continue;
-            }
-            float hardness = blockState.getHardness(world, pos);
-            if (hardness < 0.0f) {
-                continue;
-            }
-            if (hardness > Balance.HARD_BLOCK_HARDNESS && state.mass() < Balance.HARD_BLOCK_MASS_GATE) {
-                continue;
-            }
-
-            double gained = MassTables.blockMass(blockState, world, pos);
-            world.breakBlock(pos, false, player, 512);
-            state.addMass(gained);
-            world.spawnParticles(ParticleTypes.LARGE_SMOKE,
-                    pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, 4, 0.2, 0.2, 0.2, 0.01);
-            world.playSound(null, pos, blockState.getSoundGroup().getBreakSound(), SoundCategory.BLOCKS, 0.4f, 0.7f);
         }
+    }
+
+    private static boolean devourBlock(ServerWorld world, ServerPlayerEntity player,
+                                       BlackHoleState state, BlockPos pos) {
+        BlockState blockState = world.getBlockState(pos);
+        if (blockState.isAir() || blockState.isIn(MassTables.UNSWALLOWABLE)) {
+            return false;
+        }
+        if (!blockState.getFluidState().isEmpty()) {
+            return false;
+        }
+        float hardness = blockState.getHardness(world, pos);
+        if (hardness < 0.0f) {
+            return false;
+        }
+        if (hardness > Balance.HARD_BLOCK_HARDNESS && state.mass() < Balance.HARD_BLOCK_MASS_GATE) {
+            return false;
+        }
+
+        double gained = MassTables.blockMass(blockState, world, pos);
+        world.breakBlock(pos, false, player, 512);
+        state.addMass(gained);
+        world.spawnParticles(ParticleTypes.LARGE_SMOKE,
+                pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, 4, 0.2, 0.2, 0.2, 0.01);
+        world.playSound(null, pos, blockState.getSoundGroup().getBreakSound(), SoundCategory.BLOCKS, 0.4f, 0.7f);
+        return true;
     }
 
     /** Accretion shimmer: server-side particles swirl around the maw for every viewer. */

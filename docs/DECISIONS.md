@@ -28,6 +28,7 @@
 - 1.21.10 的 `Item.Settings()` 必须先 `.registryKey(...)`，否则运行时 "Item id not set" 崩溃。
 - yarn 1.21.10：`Entity` 无 `getPos()`（用 `getX/getY/getZ`）；`World.isClient` 是私有字段（用 `isClient()`）；`GameRenderer.camera` / `MatrixStack.Entry.positionMatrix` / `BlockSoundGroup.placeSound` 同理需走 getter；`SoundEvents.ENTITY_GENERIC_EXPLODE` 是 `RegistryEntry`（要 `.value()`）。
 - 服务端改实体速度后必须 `entity.velocityModified = true`。
+- 方块吞噬必须用"柱状扫描"而非随机 3D 采样：开放地形下随机点几乎全是空气，玩家感知为"吸不动"；由下至上扫描每根随机柱子里离核心最近的方块，开阔地会吃出不断加深的漏斗坑。
 - 配方 JSON（1.21.2+）：配料是纯字符串（`"O": "minecraft:obsidian"`），结果为 `{"id": ..., "count": ...}`。
 - 客户端 HUD 用新 API `HudElement` + `HudElementRegistry`（1.21.6+），文字颜色必须带 alpha（如 `0xFFDDB0FF`）。
 - 世界渲染走 `WorldRenderEvents.END_MAIN`（新包 `...rendering.v1.world`），球体用 `RenderLayer.getDebugQuads()`（禁 cull 的 position-color 层）。
