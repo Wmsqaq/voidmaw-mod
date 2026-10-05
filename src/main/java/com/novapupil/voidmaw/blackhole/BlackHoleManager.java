@@ -181,6 +181,14 @@ public final class BlackHoleManager {
                     fbe -> !state.pendingBlocks().contains(fbe));
             for (FallingBlockEntity fbe : falling) {
                 fbe.dropItem = false;
+                // Same treatment as our own tumbling blocks: no gravity, glide to the
+                // core - a block that never lands can never place itself back.
+                fbe.setNoGravity(true);
+                double fdx = mouthCenter.x - fbe.getX();
+                double fdz = mouthCenter.z - fbe.getZ();
+                double fhoriz = Math.max(Math.hypot(fdx, fdz), 0.25);
+                double fpush = Math.min(0.1 + fhoriz * 0.06, 0.4);
+                fbe.setVelocity(fdx / fhoriz * fpush, 0.02, fdz / fhoriz * fpush);
                 state.pendingBlocks().add(fbe);
             }
             if (world.getTime() % 3 == 0) {
@@ -189,7 +197,7 @@ public final class BlackHoleManager {
             if (world.getTime() % 2 == 0) {
                 ambientVortex(world, player, state, radius, mouth);
             }
-            digestPending(world, player, state);
+            digestPending(world, player, state, mouthCenter);
             if (player.age % 10 == 0) {
                 sync(player);
             }
@@ -323,18 +331,20 @@ public final class BlackHoleManager {
                     continue;
                 }
 
-                // The block is torn loose and tumbles across the disc toward the core,
-                // then gets digested where it lands.
+                // The block is torn loose and GLIDES across the disc toward the core
+                // (no gravity, so vanilla's landing-place branch can never fire),
+                // then gets digested at the core.
                 world.breakBlock(pos, false, player, 512);
                 state.addMass(MassTables.blockMass(blockState, world, pos));
 
                 FallingBlockEntity falling = FallingBlockEntity.spawnFromBlock(world, pos, blockState);
                 falling.dropItem = false;
+                falling.setNoGravity(true);
                 double dx = mouthCenter.x - falling.getX();
                 double dz = mouthCenter.z - falling.getZ();
                 double horiz = Math.max(Math.hypot(dx, dz), 0.25);
-                double push = Math.min(horiz * 0.08, 0.35);
-                falling.setVelocity(dx / horiz * push, 0.14, dz / horiz * push);
+                double push = Math.min(0.1 + horiz * 0.06, 0.4);
+                falling.setVelocity(dx / horiz * push, 0.02, dz / horiz * push);
                 world.spawnEntity(falling);
                 state.pendingBlocks().add(falling);
                 world.playSound(null, pos, blockState.getSoundGroup().getBreakSound(),
@@ -344,8 +354,9 @@ public final class BlackHoleManager {
         }
     }
 
-    /** Torn-off blocks are digested as soon as they land: loot goes to the warehouse. */
-    private static void digestPending(ServerWorld world, ServerPlayerEntity player, BlackHoleState state) {
+    /** Blocks are digested when they reach the disc core (they never touch the ground). */
+    private static void digestPending(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
+                                      Vec3d mouthCenter) {
         Iterator<FallingBlockEntity> iterator = state.pendingBlocks().iterator();
         while (iterator.hasNext()) {
             FallingBlockEntity falling = iterator.next();
@@ -353,7 +364,10 @@ public final class BlackHoleManager {
                 iterator.remove();
                 continue;
             }
-            if (!falling.isOnGround() && falling.timeFalling <= 20) {
+            double dx = falling.getX() - mouthCenter.x;
+            double dz = falling.getZ() - mouthCenter.z;
+            boolean arrived = dx * dx + dz * dz <= 1.0 || falling.timeFalling > 40;
+            if (!arrived) {
                 continue;
             }
             iterator.remove();

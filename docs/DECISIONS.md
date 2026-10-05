@@ -44,6 +44,7 @@
 - **黑洞仓库**：按玩家 UUID 分库；持久化为 `<world>/data/voidmaw/warehouses/<uuid>.json`（`ItemStack.CODEC` + Gson，作者明确要求**不用 NBT**）；`/voidmaw warehouse` 开 54 格箱子界面；溢出转质量
 - 核心交互（作者原话："右键引力核心开启/关闭，只有shift右键自爆"）：右键=开/安静关；Shift+右键=自爆（唯一引爆；超时/死亡均安静闭合，`/voidmaw detonate` 例外）
 - 方块与生物掉落走原版掉落表（注入钻石镐作 TOOL，石类保持掉落），全部入库
+- **1.21.10 大坑**：`FallingBlockEntity` 落地放置（setBlockState）不受 `dropItem` 控制（字节码证据：放置分支在 dropItem 判断之前），`dropItem=false` 只挡失败分支掉物品。要让被吞方块不"放回去"，必须让它永不落地——已改为 noGravity + 水平滑向圆盘核心 + 到核心即消化
 - 配方 JSON（1.21.2+）：配料是纯字符串（`"O": "minecraft:obsidian"`），结果为 `{"id": ..., "count": ...}`。
 - 客户端 HUD 用新 API `HudElement` + `HudElementRegistry`（1.21.6+），文字颜色必须带 alpha（如 `0xFFDDB0FF`）。
 - 世界渲染走 `WorldRenderEvents.END_MAIN`（新包 `...rendering.v1.world`），球体用 `RenderLayer.getDebugQuads()`（禁 cull 的 position-color 层）。
