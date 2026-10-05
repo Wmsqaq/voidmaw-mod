@@ -9,9 +9,9 @@ public final class HoleLevel {
     public static final int MAX = 5;
 
     /** Mass required to be at each level (index 0 = level 1). Tuned for a slow burn. */
-    private static final double[] MASS_THRESHOLDS = {0, 40, 120, 300, 700};
-    /** Pit radius per level. */
-    private static final double[] RADII = {2.5, 4.0, 6.0, 8.0, 10.0};
+    private static final double[] MASS_THRESHOLDS = {0, 100, 400, 1200, 3000};
+    /** Pit radius per level - small steps so leveling does not jolt the size. */
+    private static final double[] RADII = {2.5, 3.5, 4.5, 5.5, 7.0};
     /** Blocks harder than this need the next level (obsidian 50, ancient debris 30 -> Lv5). */
     private static final float[] MAX_BLOCK_HARDNESS = {1.0f, 3.0f, 6.0f, 15.0f, Float.MAX_VALUE};
     /** Entities with a larger average bbox dimension need the next level. */

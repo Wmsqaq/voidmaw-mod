@@ -14,10 +14,17 @@ public final class BlackHoleState {
     private int level = HoleLevel.MIN;
     /** Ground level the pit mouth is anchored to (latched, not the live player Y). */
     private double mouthY;
+    /** Golden-angle sweep cursor so block sampling covers the disc evenly. */
+    private double sweepAngle;
     private final List<FallingBlockEntity> pendingBlocks = new ArrayList<>();
 
     BlackHoleState() {
         this.ticksLeft = Balance.BASE_DURATION_TICKS;
+    }
+
+    double nextSweepAngle() {
+        sweepAngle += 2.399963;
+        return sweepAngle;
     }
 
     public double mouthY() {

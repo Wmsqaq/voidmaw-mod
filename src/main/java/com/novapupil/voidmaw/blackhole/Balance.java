@@ -25,7 +25,7 @@ public final class Balance {
 
     /** Block devouring: random column samples every few ticks. */
     public static final int BASE_BLOCK_ATTEMPTS = 1;
-    public static final int MAX_BLOCK_ATTEMPTS = 8;
+    public static final int MAX_BLOCK_ATTEMPTS = 6;
 
     /** Hand every player one Singularity Core the first time they enter the world. */
     public static final boolean GIVE_CORE_ON_FIRST_JOIN = true;
@@ -35,6 +35,6 @@ public final class Balance {
     }
 
     public static int blockAttemptsFor(double mass) {
-        return (int) Math.min(BASE_BLOCK_ATTEMPTS + mass / 25.0, MAX_BLOCK_ATTEMPTS);
+        return (int) Math.min(BASE_BLOCK_ATTEMPTS + mass / 40.0, MAX_BLOCK_ATTEMPTS);
     }
 }

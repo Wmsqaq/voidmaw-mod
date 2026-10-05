@@ -174,10 +174,13 @@ public final class BlackHoleManager {
             }
 
             double radius = HoleLevel.radiusFor(level);
-            double pitBottom = mouth - 1.0 - level;
+            // Shallow flat dish (Hole.io look): the pit never digs deeper than 3 blocks,
+            // so nothing well below the mouth plane is ever touched.
+            int depth = Math.min(1 + level, 3);
+            double pitBottom = mouth - depth;
             Vec3d pitCenter = new Vec3d(player.getX(), pitBottom + 0.5, player.getZ());
 
-            suckEntities(world, player, state, level, radius, pitBottom, mouth, pitCenter);
+            suckEntities(world, player, state, level, radius, mouth, pitCenter);
             if (world.getTime() % 3 == 0) {
                 devourBlocks(world, player, state, level, radius, pitBottom, mouth, pitCenter);
             }
@@ -220,31 +223,42 @@ public final class BlackHoleManager {
     }
 
     private static void suckEntities(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
-                                     int level, double radius, double pitBottom, double mouth, Vec3d pitCenter) {
+                                     int level, double radius, double mouth, Vec3d pitCenter) {
         Box box = new Box(
-                player.getX() - radius, pitBottom, player.getZ() - radius,
+                player.getX() - radius, mouth - 3.0, player.getZ() - radius,
                 player.getX() + radius, mouth + radius * 1.5, player.getZ() + radius);
         List<Entity> victims = world.getOtherEntities(player, box, entity ->
                 entity.isAlive() && !entity.isSpectator() && !(entity instanceof PlayerEntity)
-                        // Only things above the pit floor can fall into the maw.
-                        && entity.getY() >= pitBottom - 0.5
                         && fitsInMaw(entity, level));
         double strength = Balance.pullStrengthFor(state.mass());
+        Vec3d mouthCenter = new Vec3d(player.getX(), mouth + 0.2, player.getZ());
+        double devourHorizSq = radius * radius * 0.81;
 
         for (Entity entity : victims) {
-            Vec3d delta = pitCenter.subtract(coreOf(entity));
-            double dist = delta.length();
-            if (dist < 1.0e-4) {
-                continue;
-            }
-            Vec3d dir = delta.multiply(1.0 / dist);
-            double proximity = 1.6 - Math.min(dist / (radius * 2.0), 1.0);
-            double pull = strength * proximity;
-            entity.addVelocity(dir.x * pull, dir.y * pull + 0.02 * pull, dir.z * pull);
-            entity.velocityModified = true;
+            double dx = entity.getX() - player.getX();
+            double dz = entity.getZ() - player.getZ();
+            double horizSq = dx * dx + dz * dz;
 
-            if (entity.squaredDistanceTo(pitCenter) <= Balance.DEVOUR_DISTANCE_SQ) {
-                devour(world, player, state, pitCenter, entity);
+            if (entity.getY() > mouth + 0.1) {
+                // Strictly above the mouth plane: dragged toward the opening...
+                Vec3d delta = mouthCenter.subtract(coreOf(entity));
+                double dist = delta.length();
+                if (dist < 1.0e-4) {
+                    continue;
+                }
+                double proximity = 1.6 - Math.min(dist / (radius * 2.0), 1.0);
+                double pull = strength * proximity;
+                Vec3d dir = delta.multiply(1.0 / dist);
+                entity.addVelocity(dir.x * pull, dir.y * pull + 0.02 * pull, dir.z * pull);
+                entity.velocityModified = true;
+                if (horizSq <= devourHorizSq && entity.getY() < mouth + 0.8) {
+                    devour(world, player, state, entity);
+                }
+            } else if (horizSq <= devourHorizSq) {
+                // ...and anything that slipped below the rim plane inside the disc
+                // has already fallen into the maw. Ground-level mobs around the pit
+                // are left alone until the ground under them is eaten away.
+                devour(world, player, state, entity);
             }
         }
     }
@@ -259,8 +273,7 @@ public final class BlackHoleManager {
         return avg <= HoleLevel.maxEntitySizeFor(level);
     }
 
-    private static void devour(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
-                               Vec3d pitCenter, Entity entity) {
+    private static void devour(ServerWorld world, ServerPlayerEntity player, BlackHoleState state, Entity entity) {
         state.addMass(MassTables.entityMass(entity));
 
         // Whatever the maw swallows ends up in its owner's warehouse.
@@ -285,11 +298,20 @@ public final class BlackHoleManager {
         int bottom = MathHelper.floor(pitBottom);
         int top = MathHelper.floor(mouth) + 1;
 
-        for (int i = 0; i < attempts; i++) {
-            double angle = world.random.nextDouble() * Math.PI * 2.0;
-            double dist = Math.sqrt(world.random.nextDouble()) * radius;
-            int x = MathHelper.floor(player.getX() + Math.cos(angle) * dist);
-            int z = MathHelper.floor(player.getZ() + Math.sin(angle) * dist);
+        // Attempt 0 is always the column right under the feet so the hole follows
+        // seamlessly; the rest sweep the disc evenly (golden angle) instead of clumping.
+        for (int i = 0; i <= attempts; i++) {
+            final int x;
+            final int z;
+            if (i == 0) {
+                x = player.getBlockX();
+                z = player.getBlockZ();
+            } else {
+                double angle = state.nextSweepAngle();
+                double dist = Math.sqrt(world.random.nextDouble()) * radius;
+                x = MathHelper.floor(player.getX() + Math.cos(angle) * dist);
+                z = MathHelper.floor(player.getZ() + Math.sin(angle) * dist);
+            }
 
             // Column scan from the pit floor up to just above the mouth: the block
             // nearest the floor tears loose first. Below the floor the maw never digs.

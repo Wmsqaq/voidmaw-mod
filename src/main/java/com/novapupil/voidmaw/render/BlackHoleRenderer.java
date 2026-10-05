@@ -30,8 +30,27 @@ public final class BlackHoleRenderer {
     public record Hole(int level, double mass, double radius, double mouthY, long updatedAt) {
     }
 
-    private BlackHoleRenderer() {
+    /** Smoothly eases the drawn mouth height/radius toward the synced targets. */
+    private static final class Display {
+        double mouthY;
+        double radius;
+
+        Display(double mouthY, double radius) {
+            this.mouthY = mouthY;
+            this.radius = radius;
+        }
+
+        void approach(double targetMouthY, double targetRadius) {
+            if (Math.abs(targetMouthY - mouthY) > 4.0) {
+                mouthY = targetMouthY;
+            } else {
+                mouthY += (targetMouthY - mouthY) * 0.25;
+            }
+            radius += (targetRadius - radius) * 0.2;
+        }
     }
+
+    private static final Map<UUID, Display> DISPLAYS = new HashMap<>();
 
     public static void updateState(MassSyncPayload payload) {
         if (payload.active()) {
@@ -39,6 +58,7 @@ public final class BlackHoleRenderer {
                     payload.radius(), payload.mouthY(), System.currentTimeMillis()));
         } else {
             HOLES.remove(payload.playerId());
+            DISPLAYS.remove(payload.playerId());
             MinecraftClient client = MinecraftClient.getInstance();
             if (client.world != null) {
                 Entity entity = client.world.getEntity(payload.playerId());
@@ -70,6 +90,7 @@ public final class BlackHoleRenderer {
             Map.Entry<UUID, Hole> entry = iterator.next();
             if (now - entry.getValue().updatedAt() > STALE_AFTER_MS) {
                 iterator.remove();
+                DISPLAYS.remove(entry.getKey());
                 continue;
             }
             Entity entity = client.world.getEntity(entry.getKey());
@@ -104,12 +125,15 @@ public final class BlackHoleRenderer {
                 continue;
             }
             Hole hole = entry.getValue();
-            double radius = hole.radius() * (1.0 + 0.02 * Math.sin(now / 300.0));
+            Display display = DISPLAYS.computeIfAbsent(entry.getKey(),
+                    k -> new Display(hole.mouthY(), hole.radius()));
+            display.approach(hole.mouthY(), hole.radius());
+            double radius = display.radius * (1.0 + 0.02 * Math.sin(now / 300.0));
             // Flat hole lying on the ground: a dark violet under-layer forms the rim,
             // the near-black core sits a hair above it. Sunk slightly below the mouth
             // plane so terrain edges do not z-fight.
-            Vec3d rim = new Vec3d(entity.getX(), hole.mouthY() - 0.01, entity.getZ());
-            Vec3d core = new Vec3d(entity.getX(), hole.mouthY() - 0.005, entity.getZ());
+            Vec3d rim = new Vec3d(entity.getX(), display.mouthY - 0.01, entity.getZ());
+            Vec3d core = new Vec3d(entity.getX(), display.mouthY - 0.005, entity.getZ());
             emitDisc(consumer, matrix, rim, radius * 1.10, true, 58, 16, 92);
             emitDisc(consumer, matrix, rim, radius * 1.10, false, 58, 16, 92);
             emitDisc(consumer, matrix, core, radius, true, 4, 2, 8);
