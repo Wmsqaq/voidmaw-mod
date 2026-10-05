@@ -74,6 +74,7 @@ gradlew runClient    # 开发环境进游戏实测
 
 1. 推送 tag（`v1.0.0-beta.1` 格式，tag 含 beta/alpha 会自动标记为预发布）→ GitHub Actions 自动构建并创建 GitHub Release（`.github/workflows/release.yml`）。
 2. 本地运行 `bash tools/release-gitee.sh v1.0.0-beta.1` 把 Release 镜像到 Gitee 并附上 jar（token 放在仓库根的 `.gitee-token`，已被 gitignore；Gitee 屏蔽云机房 IP，因此该步骤必须在本地跑）。
+3. **每次更新必须本地部署**：`bash tools/deploy-local.sh` — 把最新 jar 复制到测试实例 `J:\LauncherX\.minecraft\versions\团播-21.10-API0.19.3\mods`，并自动删除该目录下的旧版 voidmaw jar。
 
 ## 致谢 / 参考
 
