@@ -130,10 +130,10 @@ public final class BlackHoleRenderer {
             display.approach(hole.mouthY(), hole.radius());
             double radius = display.radius * (1.0 + 0.02 * Math.sin(now / 300.0));
             // Flat hole lying on the ground: a dark violet under-layer forms the rim,
-            // the near-black core sits a hair above it. Sunk slightly below the mouth
-            // plane so terrain edges do not z-fight.
-            Vec3d rim = new Vec3d(entity.getX(), display.mouthY - 0.01, entity.getZ());
-            Vec3d core = new Vec3d(entity.getX(), display.mouthY - 0.005, entity.getZ());
+            // the near-black core sits a hair above it. Both float just ABOVE the
+            // mouth plane so the disc is visible as a decal on intact terrain.
+            Vec3d rim = new Vec3d(entity.getX(), display.mouthY + 0.01, entity.getZ());
+            Vec3d core = new Vec3d(entity.getX(), display.mouthY + 0.03, entity.getZ());
             emitDisc(consumer, matrix, rim, radius * 1.10, true, 58, 16, 92);
             emitDisc(consumer, matrix, rim, radius * 1.10, false, 58, 16, 92);
             emitDisc(consumer, matrix, core, radius, true, 4, 2, 8);

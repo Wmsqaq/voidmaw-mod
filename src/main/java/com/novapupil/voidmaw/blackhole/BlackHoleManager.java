@@ -152,15 +152,11 @@ public final class BlackHoleManager {
                 continue;
             }
 
-            // Float mode: no fall damage and a heavier step while the maw is open.
-            player.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOW_FALLING, 60, 0, true, false));
-            player.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, 60, 0, true, false));
-
             ServerWorld world = (ServerWorld) player.getEntityWorld();
 
-            // The mouth lies on the terrain surface underfoot. While the player walks
-            // on/above the rim it re-anchors to the surface so the hole drags along;
-            // while they are down inside their own pit the mouth stays put.
+            // The mouth plane sits exactly at the player's feet. NOTHING below it is
+            // ever touched - the hole is a flat disc of annihilation lying on the
+            // ground, devouring whatever rises above the plane inside its radius.
             double mouth = state.mouthY();
             if (player.getY() >= mouth - 0.5) {
                 mouth = surfaceUnder(world, player, mouth);
@@ -174,20 +170,16 @@ public final class BlackHoleManager {
             }
 
             double radius = HoleLevel.radiusFor(level);
-            // Shallow flat dish (Hole.io look): the pit never digs deeper than 3 blocks,
-            // so nothing well below the mouth plane is ever touched.
-            int depth = Math.min(1 + level, 3);
-            double pitBottom = mouth - depth;
-            Vec3d pitCenter = new Vec3d(player.getX(), pitBottom + 0.5, player.getZ());
+            Vec3d mouthCenter = new Vec3d(player.getX(), mouth + 0.2, player.getZ());
 
-            suckEntities(world, player, state, level, radius, mouth, pitCenter);
+            suckEntities(world, player, state, level, radius, mouth);
             if (world.getTime() % 3 == 0) {
-                devourBlocks(world, player, state, level, radius, pitBottom, mouth, pitCenter);
+                devourBlocks(world, player, state, level, radius, mouth);
             }
             if (world.getTime() % 2 == 0) {
                 ambientVortex(world, player, state, radius, mouth);
             }
-            digestPending(world, player, state, pitCenter);
+            digestPending(world, player, state);
             if (player.age % 10 == 0) {
                 sync(player);
             }
@@ -223,41 +215,32 @@ public final class BlackHoleManager {
     }
 
     private static void suckEntities(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
-                                     int level, double radius, double mouth, Vec3d pitCenter) {
+                                     int level, double radius, double mouth) {
         Box box = new Box(
-                player.getX() - radius, mouth - 3.0, player.getZ() - radius,
+                player.getX() - radius, mouth - 0.5, player.getZ() - radius,
                 player.getX() + radius, mouth + radius * 1.5, player.getZ() + radius);
         List<Entity> victims = world.getOtherEntities(player, box, entity ->
                 entity.isAlive() && !entity.isSpectator() && !(entity instanceof PlayerEntity)
                         && fitsInMaw(entity, level));
         double strength = Balance.pullStrengthFor(state.mass());
         Vec3d mouthCenter = new Vec3d(player.getX(), mouth + 0.2, player.getZ());
-        double devourHorizSq = radius * radius * 0.81;
+        double devourHorizSq = radius * radius * 0.45;
 
         for (Entity entity : victims) {
             double dx = entity.getX() - player.getX();
             double dz = entity.getZ() - player.getZ();
-            double horizSq = dx * dx + dz * dz;
-
-            if (entity.getY() > mouth + 0.1) {
-                // Strictly above the mouth plane: dragged toward the opening...
+            if (dx * dx + dz * dz > devourHorizSq) {
+                // Inside the disc but not at the core yet: dragged toward the center.
                 Vec3d delta = mouthCenter.subtract(coreOf(entity));
                 double dist = delta.length();
                 if (dist < 1.0e-4) {
                     continue;
                 }
-                double proximity = 1.6 - Math.min(dist / (radius * 2.0), 1.0);
-                double pull = strength * proximity;
                 Vec3d dir = delta.multiply(1.0 / dist);
-                entity.addVelocity(dir.x * pull, dir.y * pull + 0.02 * pull, dir.z * pull);
+                entity.addVelocity(dir.x * strength, dir.y * strength * 0.5 + 0.01, dir.z * strength);
                 entity.velocityModified = true;
-                if (horizSq <= devourHorizSq && entity.getY() < mouth + 0.8) {
-                    devour(world, player, state, entity);
-                }
-            } else if (horizSq <= devourHorizSq) {
-                // ...and anything that slipped below the rim plane inside the disc
-                // has already fallen into the maw. Ground-level mobs around the pit
-                // are left alone until the ground under them is eaten away.
+            } else {
+                // At the core of the disc: swallowed.
                 devour(world, player, state, entity);
             }
         }
@@ -293,24 +276,21 @@ public final class BlackHoleManager {
     }
 
     private static void devourBlocks(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
-                                     int level, double radius, double pitBottom, double mouth, Vec3d pitCenter) {
+                                     int level, double radius, double mouth) {
         int attempts = Balance.blockAttemptsFor(state.mass());
-        int bottom = MathHelper.floor(pitBottom);
-        int top = MathHelper.floor(mouth) + 1;
+        // ONLY blocks at or above the mouth plane are devoured - the terrain below
+        // the disc (including right under the player's feet) is never damaged.
+        // Taller structures are chewed bottom-up, level permitting.
+        int bottom = MathHelper.floor(mouth);
+        int top = MathHelper.floor(mouth) + 3 + level * 2;
+        Vec3d mouthCenter = new Vec3d(player.getX(), mouth + 0.2, player.getZ());
 
-        // The maw eats the ring AROUND the player but never the column under their
-        // own feet - walking never sinks you. Samples sweep the disc evenly instead
-        // of clumping (golden angle).
+        // Samples sweep the disc evenly (golden angle) instead of clumping.
         for (int i = 0; i < attempts; i++) {
             double angle = state.nextSweepAngle();
             double dist = Math.sqrt(world.random.nextDouble()) * radius;
             int x = MathHelper.floor(player.getX() + Math.cos(angle) * dist);
             int z = MathHelper.floor(player.getZ() + Math.sin(angle) * dist);
-            double footingDx = x + 0.5 - player.getX();
-            double footingDz = z + 0.5 - player.getZ();
-            if (footingDx * footingDx + footingDz * footingDz < 2.0) {
-                continue;
-            }
 
             // Column scan from the pit floor up to just above the mouth: the block
             // nearest the floor tears loose first. Below the floor the maw never digs.
@@ -331,14 +311,15 @@ public final class BlackHoleManager {
                     continue;
                 }
 
-                // The block tumbles into the pit as a falling block, then gets digested.
+                // The block is torn loose and tumbles across the disc toward the core,
+                // then gets digested where it lands.
                 world.breakBlock(pos, false, player, 512);
                 state.addMass(MassTables.blockMass(blockState, world, pos));
 
                 FallingBlockEntity falling = FallingBlockEntity.spawnFromBlock(world, pos, blockState);
                 falling.dropItem = false;
-                double dx = pitCenter.x - falling.getX();
-                double dz = pitCenter.z - falling.getZ();
+                double dx = mouthCenter.x - falling.getX();
+                double dz = mouthCenter.z - falling.getZ();
                 double horiz = Math.max(Math.hypot(dx, dz), 0.25);
                 double push = Math.min(horiz * 0.08, 0.35);
                 falling.setVelocity(dx / horiz * push, 0.14, dz / horiz * push);
@@ -351,9 +332,8 @@ public final class BlackHoleManager {
         }
     }
 
-    /** Blocks that reached the pit floor are digested: loot goes to the warehouse. */
-    private static void digestPending(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
-                                      Vec3d pitCenter) {
+    /** Torn-off blocks are digested as soon as they land: loot goes to the warehouse. */
+    private static void digestPending(ServerWorld world, ServerPlayerEntity player, BlackHoleState state) {
         Iterator<FallingBlockEntity> iterator = state.pendingBlocks().iterator();
         while (iterator.hasNext()) {
             FallingBlockEntity falling = iterator.next();
@@ -361,8 +341,7 @@ public final class BlackHoleManager {
                 iterator.remove();
                 continue;
             }
-            boolean arrived = falling.squaredDistanceTo(pitCenter) <= 2.25 || falling.timeFalling > 40;
-            if (!arrived) {
+            if (!falling.isOnGround() && falling.timeFalling <= 20) {
                 continue;
             }
             iterator.remove();
@@ -371,7 +350,7 @@ public final class BlackHoleManager {
                 insertOrSpill(player, state, drop);
             }
             world.spawnParticles(ParticleTypes.CLOUD,
-                    pitCenter.x, pitCenter.y + 0.5, pitCenter.z, 3, 0.3, 0.1, 0.3, 0.01);
+                    falling.getX(), falling.getY() + 0.3, falling.getZ(), 3, 0.3, 0.1, 0.3, 0.01);
             falling.discard();
         }
     }
