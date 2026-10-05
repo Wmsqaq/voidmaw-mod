@@ -173,6 +173,16 @@ public final class BlackHoleManager {
             Vec3d mouthCenter = new Vec3d(player.getX(), mouth + 0.2, player.getZ());
 
             suckEntities(world, player, state, level, radius, mouth);
+            // Claim naturally-falling blocks (sand, gravel...) inside the disc so the
+            // maw digests them instead of letting them place themselves back.
+            List<FallingBlockEntity> falling = world.getEntitiesByClass(FallingBlockEntity.class,
+                    new Box(player.getX() - radius, mouth - 0.5, player.getZ() - radius,
+                            player.getX() + radius, mouth + radius * 1.5, player.getZ() + radius),
+                    fbe -> !state.pendingBlocks().contains(fbe));
+            for (FallingBlockEntity fbe : falling) {
+                fbe.dropItem = false;
+                state.pendingBlocks().add(fbe);
+            }
             if (world.getTime() % 3 == 0) {
                 devourBlocks(world, player, state, level, radius, mouth);
             }
@@ -221,6 +231,8 @@ public final class BlackHoleManager {
                 player.getX() + radius, mouth + radius * 1.5, player.getZ() + radius);
         List<Entity> victims = world.getOtherEntities(player, box, entity ->
                 entity.isAlive() && !entity.isSpectator() && !(entity instanceof PlayerEntity)
+                        // Falling blocks digest through the block-loot path instead.
+                        && !(entity instanceof FallingBlockEntity)
                         && fitsInMaw(entity, level));
         double strength = Balance.pullStrengthFor(state.mass());
         Vec3d mouthCenter = new Vec3d(player.getX(), mouth + 0.2, player.getZ());
