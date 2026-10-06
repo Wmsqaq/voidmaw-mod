@@ -17,9 +17,10 @@ public final class Balance {
     public static final int TICKS_PER_MASS = 10;
     public static final int MAX_DURATION_TICKS = 20 * 300;
 
-    /** Entity suction: strength grows with mass and with proximity to the core. */
-    public static final double PULL_BASE = 0.06;
-    public static final double PULL_PER_SQRT_MASS = 0.004;
+    /** Entity suction: velocity is SET directly each tick (not accumulated) so
+     * ground friction can never eat the pull. */
+    public static final double PULL_SPEED_BASE = 0.2;
+    public static final double PULL_SPEED_PER_LEVEL = 0.05;
     /** Anything whose distance squared to the core is below this gets swallowed. */
     public static final double DEVOUR_DISTANCE_SQ = 1.4 * 1.4;
 
@@ -30,8 +31,8 @@ public final class Balance {
     /** Hand every player one Singularity Core the first time they enter the world. */
     public static final boolean GIVE_CORE_ON_FIRST_JOIN = true;
 
-    public static double pullStrengthFor(double mass) {
-        return PULL_BASE + Math.sqrt(mass) * PULL_PER_SQRT_MASS;
+    public static double pullSpeedFor(int level) {
+        return PULL_SPEED_BASE + level * PULL_SPEED_PER_LEVEL;
     }
 
     public static int blockAttemptsFor(double mass) {

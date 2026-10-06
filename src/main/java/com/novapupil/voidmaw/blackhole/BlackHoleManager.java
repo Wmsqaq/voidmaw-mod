@@ -59,18 +59,19 @@ public final class BlackHoleManager {
     private static final Map<UUID, BlackHoleState> ACTIVE = new HashMap<>();
     /** Tags every visual display we spawn, so orphaned ones can be cleaned up on load. */
     private static final String DISPLAY_TAG = "voidmaw_visual";
-    private static final int SHRINK_TICKS = 8;
+    /** Ghost blocks shrink in visible steps so the animation never depends on client interpolation. */
+    private static final int SHRINK_STEPS = 5;
+    private static final int SHRINK_STEP_TICKS = 2;
     private static final List<Shrinking> SHRINKING = new ArrayList<>();
 
-    /** A block ghost waiting to shrink into nothing and be discarded. */
+    /** A block ghost stepping down from full size to nothing, then discarded. */
     private static final class Shrinking {
         final BlockDisplayEntity display;
-        int ticksLeft;
-        boolean started;
+        int step;
+        int ticksToNextStep = SHRINK_STEP_TICKS;
 
-        Shrinking(BlockDisplayEntity display, int ticksLeft) {
+        Shrinking(BlockDisplayEntity display) {
             this.display = display;
-            this.ticksLeft = ticksLeft;
         }
     }
 
@@ -295,8 +296,8 @@ public final class BlackHoleManager {
 
     /**
      * The flat hole visual: a fullbright hole-disc item display gliding at the mouth.
-     * Spawned with an identity transform; the disc scale is applied on the next tick
-     * so the client can interpolate the grow-in.
+     * The scale is stepped server-side toward the level radius so the size change is
+     * always visible, interpolation or not.
      */
     private static void ensureDiscVisual(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
                                          double mouth, double radius) {
@@ -309,18 +310,24 @@ public final class BlackHoleManager {
             disc.setBrightness(new Brightness(15, 15));
             disc.addCommandTag(DISPLAY_TAG);
             disc.setTeleportDuration(3);
-            disc.setInterpolationDuration(10);
-            disc.setTransformation(AffineTransformation.identity());
+            disc.setInterpolationDuration(2);
+            float diameter = (float) (radius * 2.3);
+            disc.setTransformation(scaleTransform(diameter));
+            state.setDiscScale(diameter);
             world.spawnEntity(disc);
             state.setDiscVisual(disc);
-            state.setDiscScale(1.0f);
             return;
         }
         disc.setPosition(player.getX(), mouth + 0.03, player.getZ());
         float target = (float) (radius * 2.3);
-        if (Math.abs(target - state.discScale()) > Math.max(target * 0.02f, 0.05f)) {
-            disc.setTransformation(scaleTransform(target));
-            state.setDiscScale(target);
+        float current = state.discScale();
+        if (Math.abs(target - current) > 0.05f) {
+            float stepped = current + (target - current) * 0.3f;
+            if (Math.abs(target - stepped) < 0.05f) {
+                stepped = target;
+            }
+            disc.setTransformation(scaleTransform(stepped));
+            state.setDiscScale(stepped);
         }
     }
 
@@ -336,18 +343,16 @@ public final class BlackHoleManager {
         return new AffineTransformation(null, null, new Vector3f(diameter, diameter, diameter), null);
     }
 
-    /** A ghost of the eaten block that shrinks into nothing over a few ticks. */
+    /** A ghost of the eaten block that steps down to nothing over a few ticks. */
     private static void spawnShrinkingBlock(ServerWorld world, double x, double y, double z, BlockState blockState) {
         BlockDisplayEntity display = new BlockDisplayEntity(EntityType.BLOCK_DISPLAY, world);
         display.setPosition(x, y, z);
         display.setBlockState(blockState);
         display.addCommandTag(DISPLAY_TAG);
-        display.setInterpolationDuration(SHRINK_TICKS);
+        display.setInterpolationDuration(SHRINK_STEP_TICKS);
         display.setTransformation(AffineTransformation.identity());
         world.spawnEntity(display);
-        // Apply the shrink one tick later so the spawn packet still carries the
-        // full-size ghost and the client can interpolate it down to nothing.
-        SHRINKING.add(new Shrinking(display, SHRINK_TICKS + 6));
+        SHRINKING.add(new Shrinking(display));
     }
 
     private static void tickShrinking() {
@@ -358,23 +363,25 @@ public final class BlackHoleManager {
                 iterator.remove();
                 continue;
             }
-            if (!shrinking.started) {
-                shrinking.started = true;
-                shrinking.display.setTransformation(shrinkTransform());
+            if (--shrinking.ticksToNextStep > 0) {
                 continue;
             }
-            if (--shrinking.ticksLeft <= 0) {
+            shrinking.ticksToNextStep = SHRINK_STEP_TICKS;
+            shrinking.step++;
+            if (shrinking.step >= SHRINK_STEPS) {
                 shrinking.display.discard();
                 iterator.remove();
+                continue;
             }
+            float scale = Math.max(1.0f - shrinking.step / (float) SHRINK_STEPS, 0.02f);
+            shrinking.display.setTransformation(shrinkTransform(scale));
         }
     }
 
     /** Collapse toward the block's centre: p -> s*p + (1-s)*0.5. */
-    private static AffineTransformation shrinkTransform() {
-        float s = 0.001f;
-        float t = (1.0f - s) * 0.5f;
-        return new AffineTransformation(new Vector3f(t, t, t), null, new Vector3f(s, s, s), null);
+    private static AffineTransformation shrinkTransform(float scale) {
+        float t = (1.0f - scale) * 0.5f;
+        return new AffineTransformation(new Vector3f(t, t, t), null, new Vector3f(scale, scale, scale), null);
     }
 
     private static void suckEntities(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
@@ -389,7 +396,6 @@ public final class BlackHoleManager {
                         && !(entity instanceof ItemDisplayEntity)
                         && !(entity instanceof BlockDisplayEntity)
                         && fitsInMaw(entity, level));
-        double strength = Balance.pullStrengthFor(state.mass());
         Vec3d mouthCenter = new Vec3d(player.getX(), mouth + 0.2, player.getZ());
         double devourHorizSq = radius * radius * 0.45;
 
@@ -398,13 +404,17 @@ public final class BlackHoleManager {
             double dz = entity.getZ() - player.getZ();
             if (dx * dx + dz * dz > devourHorizSq) {
                 // Inside the disc but not at the core yet: dragged toward the center.
+                // Velocity is set directly every tick so friction can't fight the pull.
                 Vec3d delta = mouthCenter.subtract(coreOf(entity));
                 double dist = delta.length();
                 if (dist < 1.0e-4) {
                     continue;
                 }
                 Vec3d dir = delta.multiply(1.0 / dist);
-                entity.addVelocity(dir.x * strength, dir.y * strength * 0.5 + 0.01, dir.z * strength);
+                double speed = Balance.pullSpeedFor(level);
+                entity.setVelocity(dir.x * speed,
+                        entity.getVelocity().y + (entity.isOnGround() ? 0.08 : 0.0),
+                        dir.z * speed);
                 entity.velocityModified = true;
             } else {
                 // At the core of the disc: swallowed.
