@@ -32,7 +32,6 @@ import net.minecraft.text.Text;
 import net.minecraft.util.math.AffineTransformation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
-import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
@@ -80,25 +79,34 @@ public final class BlackHoleManager {
     }
 
     /**
-     * Closes the maw. Only {@code detonate} releases the stored mass as a
-     * level-scaled explosion; quiet closes (right-click, timeout, death) do not.
+     * Closes the maw. Detonating releases the stored mass as a level-and-mass
+     * scaled explosion and disperses ALL growth; a quiet close keeps it.
      */
     public static void stop(ServerPlayerEntity player, boolean detonate) {
+        stop(player, detonate, detonate);
+    }
+
+    private static void stop(ServerPlayerEntity player, boolean detonate, boolean clearMass) {
         BlackHoleState state = ACTIVE.remove(player.getUuid());
         if (state == null) {
             return;
         }
-        state.retainProgress();
-        discardDiscVisual(state);
         ServerWorld world = world(player);
         double mass = state.mass();
         int level = HoleLevel.levelFor(mass);
+        // Disperse before the blast so a crash mid-explosion cannot resurrect the mass.
+        if (clearMass) {
+            state.clearProgress();
+        } else {
+            state.retainProgress();
+        }
+        discardDiscVisual(state);
 
         if (detonate) {
             // Short immunity so the blast does not instantly kill its former host.
             player.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 60, 4, true, false));
             player.addStatusEffect(new StatusEffectInstance(StatusEffects.FIRE_RESISTANCE, 60, 0, true, false));
-            float power = HoleLevel.explosionPowerFor(level);
+            float power = HoleLevel.detonationPowerFor(level, mass);
             world.createExplosion(player, player.getX(), player.getY(), player.getZ(),
                     power, World.ExplosionSourceType.MOB);
             world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_GENERIC_EXPLODE.value(),
@@ -107,6 +115,11 @@ public final class BlackHoleManager {
                     player.getX(), player.getY(), player.getZ(), 1, 0.0, 0.0, 0.0, 0.0);
             player.sendMessage(Text.translatable("commands.voidmaw.detonated",
                     level, String.format(java.util.Locale.ROOT, "%.2f", power)), false);
+        } else if (clearMass) {
+            world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT,
+                    SoundCategory.PLAYERS, 0.8f, 0.5f);
+            player.sendMessage(Text.translatable("commands.voidmaw.mass_lost",
+                    String.format(java.util.Locale.ROOT, "%.0f", mass)), false);
         } else {
             world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT,
                     SoundCategory.PLAYERS, 0.8f, 0.5f);
@@ -116,10 +129,26 @@ public final class BlackHoleManager {
         sync(player);
     }
 
-    /** The maw quietly snaps shut when its host dies - only shift+use detonates. */
+    /**
+     * Death disperses the maw's growth - active or dormant - and tells the player
+     * how much mass scattered into the void.
+     */
     public static void onDeath(ServerPlayerEntity player) {
         if (ACTIVE.containsKey(player.getUuid())) {
-            stop(player, false);
+            stop(player, false, true);
+            return;
+        }
+        try {
+            HoleProgress progress = HoleProgress.get(world(player).getServer(), player.getUuid());
+            double lost = progress.mass();
+            if (lost > 0) {
+                progress.reset();
+                progress.flush();
+                player.sendMessage(Text.translatable("commands.voidmaw.mass_lost",
+                        String.format(java.util.Locale.ROOT, "%.0f", lost)), false);
+            }
+        } catch (IllegalStateException unreadable) {
+            // Progress file unreadable: nothing can be cleared safely.
         }
     }
 

@@ -29,6 +29,12 @@ public final class AbsorptionRegressionTest {
         assert Math.abs(HoleLevel.explosionPowerFor(10) - 6.89711f) < 0.001f;
         assert HoleLevel.explosionPowerFor(100) - HoleLevel.explosionPowerFor(99)
                 < HoleLevel.explosionPowerFor(2) - HoleLevel.explosionPowerFor(1);
+        assert HoleLevel.detonationPowerFor(1, 0) == 3.0f;
+        assert HoleLevel.detonationPowerFor(5, 3000) > HoleLevel.detonationPowerFor(5, 1000)
+                : "stored mass must add punch";
+        assert HoleLevel.detonationPowerFor(1, 10_000_000) == 15.0f
+                : "stored mass adds at most 12 on top of the level floor";
+        assert HoleLevel.detonationPowerFor(100, 10_000_000) == 24.0f : "total power is capped";
         assert Double.isFinite(HoleLevel.radiusFor(Integer.MAX_VALUE));
         assert DiscSweep.minChunk(8.0, 2.5) == 0 && DiscSweep.maxChunk(8.0, 2.5) == 0;
         assert DiscSweep.minChunk(0.0, 2.5) == -1 && DiscSweep.maxChunk(0.0, 2.5) == 0
@@ -74,7 +80,11 @@ public final class AbsorptionRegressionTest {
             var reload = new HoleProgress(file);
             assert reload.mass() == 5700;
             reload.retain(1);
-            assert reload.mass() == 5700;
+            assert reload.mass() == 5700 : "retain must never lower saved mass";
+            reload.reset();
+            reload.flush();
+            var cleared = new HoleProgress(file);
+            assert cleared.mass() == 0 : "reset must disperse growth on disk";
             java.nio.file.Files.delete(file);
             java.nio.file.Files.delete(file.getParent());
         } catch (java.io.IOException failure) {

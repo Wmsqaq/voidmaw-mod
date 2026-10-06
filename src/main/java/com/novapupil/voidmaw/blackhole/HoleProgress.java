@@ -52,6 +52,15 @@ public final class HoleProgress {
         }
     }
 
+    /** Detonation and death disperse the growth; only ever touches a readable file. */
+    public void reset() {
+        if (loadFailed || mass == 0) {
+            return;
+        }
+        mass = 0;
+        dirty = true;
+    }
+
     private void load() {
         if (!Files.exists(file)) {
             return;

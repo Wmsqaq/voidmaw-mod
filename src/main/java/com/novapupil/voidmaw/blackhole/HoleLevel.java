@@ -42,6 +42,13 @@ public final class HoleLevel {
         return (float) (3.0 + 0.75 * Math.pow(Math.max(0.0, (double) level - 1), 0.75));
     }
 
+    /** Detonation releases the level's floor plus the actually stored mass, capped
+     * so late-game blasts stay server-friendly while always feeling heavy. */
+    public static float detonationPowerFor(int level, double mass) {
+        float stored = (float) Math.min(Math.sqrt(Math.max(0.0, mass)) * 0.08, 12.0);
+        return Math.min(explosionPowerFor(level) + stored, 24.0f);
+    }
+
     public static double levelThreshold(int level) {
         if (level <= 5) {
             return MASS_THRESHOLDS[Math.max(MIN, level) - 1];

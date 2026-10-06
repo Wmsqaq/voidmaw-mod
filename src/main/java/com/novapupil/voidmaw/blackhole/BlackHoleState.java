@@ -43,6 +43,16 @@ public final class BlackHoleState {
         }
     }
 
+    /** Detonation and death disperse everything: growth resets to zero on disk. */
+    void clearProgress() {
+        mass = 0.0;
+        level = HoleLevel.MIN;
+        if (progress != null) {
+            progress.reset();
+            progress.flush();
+        }
+    }
+
     public double mouthY() {
         return mouthY;
     }

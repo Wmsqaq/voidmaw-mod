@@ -73,11 +73,8 @@ public final class BlackHoleHud implements HudElement {
                                 hole.level(),
                                 String.format(Locale.ROOT, "%.0f", hole.mass()),
                                 String.format(Locale.ROOT, "%.0f", next));
-        int remainingTicks = active ? hole.remainingTicks() : 0;
-        String secondsLeft = remainingTicks < 0 ? "?" : Integer.toString((remainingTicks + 19) / 20);
         Text stats = Text.translatable("hud.voidmaw.stats",
-                String.format(Locale.ROOT, "%.1f", active ? hole.radius() : 0.0),
-                secondsLeft);
+                String.format(Locale.ROOT, "%.1f", active ? hole.radius() : 0.0));
 
         int lineHeight = textRenderer.fontHeight;
         int contentWidth = Math.max(Math.max(textRenderer.getWidth(levelLine), textRenderer.getWidth(stats)), BAR_WIDTH);

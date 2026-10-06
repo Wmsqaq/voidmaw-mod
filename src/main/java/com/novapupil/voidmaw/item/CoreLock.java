@@ -1,5 +1,6 @@
 package com.novapupil.voidmaw.item;
 
+import com.novapupil.voidmaw.blackhole.Balance;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
@@ -62,6 +63,10 @@ public final class CoreLock {
             core = cursor.copyWithCount(1);
         }
         if (core.isEmpty()) {
+            // The gift is disabled and the player never had a core: nothing to lock.
+            if (!Balance.GIVE_CORE_ON_FIRST_JOIN) {
+                return;
+            }
             core = new ItemStack(ModItems.SINGULARITY_CORE);
         }
         boolean changed = !isCore(retained) || retained.getCount() != 1;
