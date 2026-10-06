@@ -22,9 +22,6 @@ import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
-import net.minecraft.network.packet.s2c.play.TitleFadeS2CPacket;
-import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -78,18 +75,7 @@ public final class BlackHoleManager {
         ACTIVE.put(player.getUuid(), state);
         world(player).playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDER_DRAGON_GROWL,
                 SoundCategory.PLAYERS, 0.8f, 0.6f);
-        showHint(player, Text.translatable("title.voidmaw.started_hint"));
         sync(player);
-    }
-
-    /**
-     * Subtitle-position hint with an EMPTY title: vanilla only renders a subtitle
-     * alongside a title packet, and an empty title keeps the big center text clear.
-     */
-    private static void showHint(ServerPlayerEntity player, Text subtitle) {
-        player.networkHandler.sendPacket(new TitleFadeS2CPacket(5, 40, 10));
-        player.networkHandler.sendPacket(new SubtitleS2CPacket(subtitle));
-        player.networkHandler.sendPacket(new TitleS2CPacket(Text.empty()));
     }
 
     /**
@@ -440,9 +426,9 @@ public final class BlackHoleManager {
     /**
      * Devours blocks by walking chunk sections directly through the chunk palette:
      * empty sections cost a single isEmpty() call, rows outside the disc are cut by
-     * geometry, and only real cells count against the scan budget - the same coverage
-     * in a fraction of the lookups the old per-position world scan needed. Sections
-     * run bottom-up so the disc eats the layer nearest to it first.
+     * geometry, and only real cells count against the scan budget. Two passes share
+     * the tick's throughput: evenly first, then dense chunks (fresh terrain ahead
+     * while moving) may consume whatever the empty chunks left unused.
      */
     private static void devourBlocks(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
                                      double radius, double mouth) {
@@ -459,79 +445,98 @@ public final class BlackHoleManager {
         if (chunkVolume == 0) {
             return;
         }
+        int blocksPerTick = Balance.blocksPerTick(state.level());
+        int budget = Balance.scanBudget(state.level());
         int baseSection = world.getBottomY() >> 4;
         int bottomSection = Math.max(0, (bottom >> 4) - baseSection);
-        int blocksPerTick = Balance.blocksPerTick(state.level());
-        int checked = 0;
-        // Spread the per-tick absorption across every chunk in the disc so no region
-        // starves while the cursor works through a dense neighbour.
-        int quota = Math.max(1, blocksPerTick / (int) Math.min(chunkVolume, 64));
-        int consumed = 0;
+        SweepBudget work = new SweepBudget();
+        int evenShare = Math.max(1, blocksPerTick / (int) Math.min(chunkVolume, 64));
 
-        sweep:
-        for (int visited = 0; visited < chunkVolume; visited++) {
-            long index = state.nextSweepIndex(chunkVolume);
-            int cx = DiscSweep.chunkX(index, minCx, zSpan);
-            int cz = DiscSweep.chunkZ(index, minCz, zSpan);
-            // create=false: never force a chunk into memory for the maw.
-            Chunk chunk = world.getChunk(cx, cz, ChunkStatus.FULL, false);
-            if (chunk == null) {
+        for (int pass = 0; pass < 2 && work.consumed < blocksPerTick && work.checked < budget; pass++) {
+            int quota = pass == 0 ? evenShare : blocksPerTick;
+            for (int visited = 0; visited < chunkVolume; visited++) {
+                long index = state.nextSweepIndex(chunkVolume);
+                int cx = DiscSweep.chunkX(index, minCx, zSpan);
+                int cz = DiscSweep.chunkZ(index, minCz, zSpan);
+                // create=false: never force a chunk into memory for the maw.
+                if (!scanChunk(world, player, state, cx, cz, bottom, top, baseSection, bottomSection,
+                        centerX, centerZ, radius, quota, blocksPerTick, budget, work)) {
+                    return;
+                }
+            }
+        }
+    }
+
+    /** Mutable per-tick work counters shared by every chunk scan. */
+    private static final class SweepBudget {
+        int checked;
+        int consumed;
+    }
+
+    /**
+     * Scans one chunk's sections bottom-up and absorbs up to {@code quota} blocks.
+     * Returns false when the whole sweep must stop for this tick.
+     */
+    private static boolean scanChunk(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
+                                     int cx, int cz, int bottom, int top, int baseSection, int bottomSection,
+                                     double centerX, double centerZ, double radius,
+                                     int quota, int blocksPerTick, int budget, SweepBudget work) {
+        Chunk chunk = world.getChunk(cx, cz, ChunkStatus.FULL, false);
+        if (chunk == null) {
+            return true;
+        }
+        ChunkSection[] sections = chunk.getSectionArray();
+        int highest = chunk.getHighestNonEmptySection();
+        if (highest < bottomSection) {
+            return true;
+        }
+        int topSection = Math.min(highest, Math.min(sections.length - 1, (top >> 4) - baseSection));
+        DiscSweep.Row[] rows = new DiscSweep.Row[16];
+        for (int lx = 0; lx < 16; lx++) {
+            rows[lx] = DiscSweep.rowRange(cx, cz, lx, centerX, centerZ, radius);
+        }
+        int taken = 0;
+        for (int s = bottomSection; s <= topSection; s++) {
+            ChunkSection section = sections[s];
+            if (section == null || section.isEmpty()) {
                 continue;
             }
-            ChunkSection[] sections = chunk.getSectionArray();
-            int highest = chunk.getHighestNonEmptySection();
-            if (highest < bottomSection) {
-                continue;
-            }
-            int topSection = Math.min(highest, Math.min(sections.length - 1, (top >> 4) - baseSection));
-            DiscSweep.Row[] rows = new DiscSweep.Row[16];
-            for (int lx = 0; lx < 16; lx++) {
-                rows[lx] = DiscSweep.rowRange(cx, cz, lx, centerX, centerZ, radius);
-            }
-            int taken = 0;
-            chunkScan:
-            for (int s = bottomSection; s <= topSection; s++) {
-                ChunkSection section = sections[s];
-                if (section == null || section.isEmpty()) {
+            int sectionBaseY = (baseSection + s) << 4;
+            for (int ly = 0; ly < 16; ly++) {
+                int y = sectionBaseY + ly;
+                if (y < bottom || y > top) {
                     continue;
                 }
-                int sectionBaseY = (baseSection + s) << 4;
-                for (int ly = 0; ly < 16; ly++) {
-                    int y = sectionBaseY + ly;
-                    if (y < bottom || y > top) {
+                for (int lx = 0; lx < 16; lx++) {
+                    DiscSweep.Row row = rows[lx];
+                    if (row.empty()) {
                         continue;
                     }
-                    for (int lx = 0; lx < 16; lx++) {
-                        DiscSweep.Row row = rows[lx];
-                        if (row.empty()) {
+                    int x = (cx << 4) + lx;
+                    for (int lz = row.start(); lz <= row.endInclusive(); lz++) {
+                        if (++work.checked > budget || work.consumed >= blocksPerTick) {
+                            return false;
+                        }
+                        if (taken >= quota) {
+                            return true;
+                        }
+                        BlockState blockState = section.getBlockState(lx, ly, lz);
+                        if (blockState.isAir() || blockState.isIn(MassTables.UNSWALLOWABLE)) {
                             continue;
                         }
-                        int x = (cx << 4) + lx;
-                        for (int lz = row.start(); lz <= row.endInclusive(); lz++) {
-                            if (++checked > Balance.scanBudget(state.level())
-                                    || consumed >= blocksPerTick) {
-                                break sweep;
-                            }
-                            if (taken >= quota) {
-                                break chunkScan;
-                            }
-                            BlockState blockState = section.getBlockState(lx, ly, lz);
-                            if (blockState.isAir() || blockState.isIn(MassTables.UNSWALLOWABLE)) {
-                                continue;
-                            }
-                            BlockPos pos = new BlockPos(x, y, (cz << 4) + lz);
-                            if (blockState.getHardness(world, pos) < 0) {
-                                continue;
-                            }
-                            if (absorbBlock(world, player, state, blockState, pos)) {
-                                taken++;
-                                consumed++;
-                            }
+                        BlockPos pos = new BlockPos(x, y, (cz << 4) + lz);
+                        if (blockState.getHardness(world, pos) < 0) {
+                            continue;
+                        }
+                        if (absorbBlock(world, player, state, blockState, pos)) {
+                            taken++;
+                            work.consumed++;
                         }
                     }
                 }
             }
         }
+        return true;
     }
 
     /** Removes one block (or fluid column), banking its loot and mass; false if the world refused. */
