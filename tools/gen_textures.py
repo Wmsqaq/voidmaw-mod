@@ -111,7 +111,8 @@ def icon_texture():
 
 
 def disc_texture():
-    """Flat hole decal: near-black event horizon, violet rim, soft alpha falloff."""
+    """Flat hole decal, cutout-safe (item layers discard alpha < 0.1):
+    near-black event horizon, bright violet rim with swirl arcs, quick fade."""
     size = 256
     cx = cy = size / 2
     rows = []
@@ -119,16 +120,19 @@ def disc_texture():
         row = []
         for x in range(size):
             d = math.hypot(x - cx, y - cy) / (size / 2)
-            if d < 0.55:
+            if d < 0.58:
                 sheen = 12 * math.sin(x * 0.15 + y * 0.11)
                 row.append((clamp(5 + sheen * 0.3), clamp(3 + sheen * 0.2), clamp(12 + sheen), 255))
-            elif d < 0.82:
-                t = (d - 0.55) / 0.27
-                arc = 0.6 + 0.4 * math.sin(math.atan2(y - cy, x - cx) * 2.0)
-                row.append((clamp(150 * arc), clamp(70 * arc), clamp(220 * arc), clamp(235 * (1 - t * 0.75))))
-            elif d < 0.97:
-                t = (d - 0.82) / 0.15
-                row.append((clamp(140 * (1 - t)), clamp(60 * (1 - t)), clamp(210 * (1 - t)), clamp(60 * (1 - t))))
+            elif d < 0.84:
+                # Bright violet rim, fully opaque so the cutout layer keeps it.
+                angle = math.atan2(y - cy, x - cx)
+                arc = 0.6 + 0.4 * math.sin(angle * 2.0 + d * 6.0)
+                row.append((clamp(190 * arc), clamp(110 * arc), clamp(255 * arc), 255))
+            elif d < 1.0:
+                # Quick fade so the hard cutout edge does not read as a hard circle.
+                t = (d - 0.84) / 0.16
+                row.append((clamp(150 * (1 - t)), clamp(90 * (1 - t)),
+                            clamp(220 * (1 - t)), clamp(160 * (1 - t))))
             else:
                 row.append((0, 0, 0, 0))
         rows.append(row)

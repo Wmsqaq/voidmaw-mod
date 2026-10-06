@@ -1,14 +1,19 @@
 package com.novapupil.voidmaw.blackhole;
 
+import com.novapupil.voidmaw.item.ModItems;
 import com.novapupil.voidmaw.net.MassSyncPayload;
 import com.novapupil.voidmaw.warehouse.BlackHoleWarehouse;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityType;
 import net.minecraft.entity.FallingBlockEntity;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.decoration.Brightness;
+import net.minecraft.entity.decoration.DisplayEntity.BlockDisplayEntity;
+import net.minecraft.entity.decoration.DisplayEntity.ItemDisplayEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.player.PlayerEntity;
@@ -20,12 +25,15 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
+import net.minecraft.util.math.AffineTransformation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
+import org.joml.Vector3f;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -38,14 +46,33 @@ import java.util.UUID;
  * Geometry: the hole is a flat pit lying ON the ground at the player's feet. Its mouth
  * is anchored to the terrain surface underfoot (and drags along as the player walks);
  * the pit floor is {@code mouth - 1 - level}. ONLY things above the pit floor are eaten:
- * blocks are peeled from the floor upward and tumble into the pit as falling blocks,
- * entities are dragged over the rim and devoured at the bottom. Everything swallowed
- * ends up in the owner's warehouse.
+ * blocks shrink away as ghost displays and entities are dragged over the rim and
+ * devoured at the bottom. Everything swallowed ends up in the owner's warehouse.
+ *
+ * All visuals are plain vanilla display entities (ItemDisplay disc, BlockDisplay
+ * ghosts) so every client - vanilla, Sodium or Iris - renders them through the
+ * standard entity pipeline.
  */
 public final class BlackHoleManager {
     public static final Text ALREADY_OPEN = Text.translatable("commands.voidmaw.already");
 
     private static final Map<UUID, BlackHoleState> ACTIVE = new HashMap<>();
+    /** Tags every visual display we spawn, so orphaned ones can be cleaned up on load. */
+    private static final String DISPLAY_TAG = "voidmaw_visual";
+    private static final int SHRINK_TICKS = 8;
+    private static final List<Shrinking> SHRINKING = new ArrayList<>();
+
+    /** A block ghost waiting to shrink into nothing and be discarded. */
+    private static final class Shrinking {
+        final BlockDisplayEntity display;
+        int ticksLeft;
+        boolean started;
+
+        Shrinking(BlockDisplayEntity display, int ticksLeft) {
+            this.display = display;
+            this.ticksLeft = ticksLeft;
+        }
+    }
 
     private BlackHoleManager() {
     }
@@ -77,6 +104,7 @@ public final class BlackHoleManager {
         if (state == null) {
             return;
         }
+        discardDiscVisual(state);
         ServerWorld world = world(player);
         double mass = state.mass();
         int level = HoleLevel.levelFor(mass);
@@ -128,19 +156,57 @@ public final class BlackHoleManager {
     }
 
     public static void onDisconnect(ServerPlayerEntity player) {
-        if (ACTIVE.remove(player.getUuid()) == null) {
+        BlackHoleState state = ACTIVE.remove(player.getUuid());
+        if (state == null) {
             return;
         }
+        discardDiscVisual(state);
         MassSyncPayload payload = new MassSyncPayload(player.getUuid(), false, 0, 0.0, 0.0, 0.0);
         for (ServerPlayerEntity watcher : PlayerLookup.tracking(player)) {
             ServerPlayNetworking.send(watcher, payload);
         }
     }
 
+    /**
+     * Discards tagged visuals left over from a server save mid-hole (restarts while a
+     * hole was open) that loaded back with nobody managing them.
+     */
+    private static void sweepOrphanVisuals(MinecraftServer server) {
+        for (ServerWorld world : server.getWorlds()) {
+            for (Entity entity : world.iterateEntities()) {
+                if (!(entity instanceof ItemDisplayEntity) && !(entity instanceof BlockDisplayEntity)) {
+                    continue;
+                }
+                if (!entity.getCommandTags().contains(DISPLAY_TAG) || isManagedVisual(entity)) {
+                    continue;
+                }
+                entity.discard();
+            }
+        }
+    }
+
+    private static boolean isManagedVisual(Entity entity) {
+        for (BlackHoleState state : ACTIVE.values()) {
+            if (state.discVisual() == entity) {
+                return true;
+            }
+        }
+        for (Shrinking shrinking : SHRINKING) {
+            if (shrinking.display == entity) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static void tick(MinecraftServer server) {
         if (!ACTIVE.isEmpty() && server.getTicks() % 40 == 0) {
             BlackHoleWarehouse.flushAll();
         }
+        if (server.getTicks() % 100 == 0) {
+            sweepOrphanVisuals(server);
+        }
+        tickShrinking();
         for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
             BlackHoleState state = ACTIVE.get(player.getUuid());
             if (state == null) {
@@ -170,24 +236,22 @@ public final class BlackHoleManager {
             double radius = HoleLevel.radiusFor(level);
             Vec3d mouthCenter = new Vec3d(player.getX(), mouth + 0.2, player.getZ());
 
+            ensureDiscVisual(world, player, state, mouth, radius);
             suckEntities(world, player, state, level, radius, mouth);
-            // Claim naturally-falling blocks (sand, gravel...) inside the disc so the
-            // maw digests them instead of letting them place themselves back.
+            // Claim naturally-falling blocks (sand, gravel...) inside the disc: they
+            // become shrinking ghosts, so they can never land and place themselves back.
             List<FallingBlockEntity> falling = world.getEntitiesByClass(FallingBlockEntity.class,
                     new Box(player.getX() - radius, mouth - 0.5, player.getZ() - radius,
                             player.getX() + radius, mouth + radius * 1.5, player.getZ() + radius),
-                    fbe -> !state.pendingBlocks().contains(fbe));
+                    Entity::isAlive);
             for (FallingBlockEntity fbe : falling) {
-                fbe.dropItem = false;
-                // Same treatment as our own tumbling blocks: no gravity, glide to the
-                // core - a block that never lands can never place itself back.
-                fbe.setNoGravity(true);
-                double fdx = mouthCenter.x - fbe.getX();
-                double fdz = mouthCenter.z - fbe.getZ();
-                double fhoriz = Math.max(Math.hypot(fdx, fdz), 0.25);
-                double fpush = Math.min(0.1 + fhoriz * 0.06, 0.4);
-                fbe.setVelocity(fdx / fhoriz * fpush, 0.02, fdz / fhoriz * fpush);
-                state.pendingBlocks().add(fbe);
+                BlockState blockState = fbe.getBlockState();
+                state.addMass(MassTables.blockMass(blockState, world, fbe.getBlockPos()));
+                for (ItemStack drop : LootHelper.blockLoot(world, blockState, fbe.getBlockPos())) {
+                    insertOrSpill(player, state, drop);
+                }
+                spawnShrinkingBlock(world, fbe.getX() - 0.5, fbe.getY(), fbe.getZ() - 0.5, blockState);
+                fbe.discard();
             }
             if (world.getTime() % 3 == 0) {
                 devourBlocks(world, player, state, level, radius, mouth);
@@ -195,7 +259,6 @@ public final class BlackHoleManager {
             if (world.getTime() % 2 == 0) {
                 ambientVortex(world, player, state, radius, mouth);
             }
-            digestPending(world, player, state, mouthCenter);
             if (player.age % 10 == 0) {
                 sync(player);
             }
@@ -230,6 +293,90 @@ public final class BlackHoleManager {
                 level, String.format(java.util.Locale.ROOT, "%.1f", r)), false);
     }
 
+    /**
+     * The flat hole visual: a fullbright hole-disc item display gliding at the mouth.
+     * Spawned with an identity transform; the disc scale is applied on the next tick
+     * so the client can interpolate the grow-in.
+     */
+    private static void ensureDiscVisual(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
+                                         double mouth, double radius) {
+        ItemDisplayEntity disc = state.discVisual();
+        if (disc == null || disc.isRemoved()) {
+            disc = new ItemDisplayEntity(EntityType.ITEM_DISPLAY, world);
+            disc.setPosition(player.getX(), mouth + 0.03, player.getZ());
+            disc.setItemStack(new ItemStack(ModItems.HOLE_DISC));
+            // Fullbright so the violet rim stays visible in caves and at night.
+            disc.setBrightness(new Brightness(15, 15));
+            disc.addCommandTag(DISPLAY_TAG);
+            disc.setTeleportDuration(3);
+            disc.setInterpolationDuration(10);
+            disc.setTransformation(AffineTransformation.identity());
+            world.spawnEntity(disc);
+            state.setDiscVisual(disc);
+            state.setDiscScale(1.0f);
+            return;
+        }
+        disc.setPosition(player.getX(), mouth + 0.03, player.getZ());
+        float target = (float) (radius * 2.3);
+        if (Math.abs(target - state.discScale()) > Math.max(target * 0.02f, 0.05f)) {
+            disc.setTransformation(scaleTransform(target));
+            state.setDiscScale(target);
+        }
+    }
+
+    private static void discardDiscVisual(BlackHoleState state) {
+        ItemDisplayEntity disc = state.discVisual();
+        if (disc != null) {
+            disc.discard();
+            state.setDiscVisual(null);
+        }
+    }
+
+    private static AffineTransformation scaleTransform(float diameter) {
+        return new AffineTransformation(null, null, new Vector3f(diameter, diameter, diameter), null);
+    }
+
+    /** A ghost of the eaten block that shrinks into nothing over a few ticks. */
+    private static void spawnShrinkingBlock(ServerWorld world, double x, double y, double z, BlockState blockState) {
+        BlockDisplayEntity display = new BlockDisplayEntity(EntityType.BLOCK_DISPLAY, world);
+        display.setPosition(x, y, z);
+        display.setBlockState(blockState);
+        display.addCommandTag(DISPLAY_TAG);
+        display.setInterpolationDuration(SHRINK_TICKS);
+        display.setTransformation(AffineTransformation.identity());
+        world.spawnEntity(display);
+        // Apply the shrink one tick later so the spawn packet still carries the
+        // full-size ghost and the client can interpolate it down to nothing.
+        SHRINKING.add(new Shrinking(display, SHRINK_TICKS + 6));
+    }
+
+    private static void tickShrinking() {
+        Iterator<Shrinking> iterator = SHRINKING.iterator();
+        while (iterator.hasNext()) {
+            Shrinking shrinking = iterator.next();
+            if (shrinking.display.isRemoved()) {
+                iterator.remove();
+                continue;
+            }
+            if (!shrinking.started) {
+                shrinking.started = true;
+                shrinking.display.setTransformation(shrinkTransform());
+                continue;
+            }
+            if (--shrinking.ticksLeft <= 0) {
+                shrinking.display.discard();
+                iterator.remove();
+            }
+        }
+    }
+
+    /** Collapse toward the block's centre: p -> s*p + (1-s)*0.5. */
+    private static AffineTransformation shrinkTransform() {
+        float s = 0.001f;
+        float t = (1.0f - s) * 0.5f;
+        return new AffineTransformation(new Vector3f(t, t, t), null, new Vector3f(s, s, s), null);
+    }
+
     private static void suckEntities(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
                                      int level, double radius, double mouth) {
         Box box = new Box(
@@ -239,6 +386,8 @@ public final class BlackHoleManager {
                 entity.isAlive() && !entity.isSpectator() && !(entity instanceof PlayerEntity)
                         // Falling blocks digest through the block-loot path instead.
                         && !(entity instanceof FallingBlockEntity)
+                        && !(entity instanceof ItemDisplayEntity)
+                        && !(entity instanceof BlockDisplayEntity)
                         && fitsInMaw(entity, level));
         double strength = Balance.pullStrengthFor(state.mass());
         Vec3d mouthCenter = new Vec3d(player.getX(), mouth + 0.2, player.getZ());
@@ -301,7 +450,6 @@ public final class BlackHoleManager {
         // Taller structures are chewed bottom-up, level permitting.
         int bottom = MathHelper.floor(mouth);
         int top = MathHelper.floor(mouth) + 3 + level * 2;
-        Vec3d mouthCenter = new Vec3d(player.getX(), mouth + 0.2, player.getZ());
 
         // Samples sweep the disc evenly (golden angle) instead of clumping.
         for (int i = 0; i < attempts; i++) {
@@ -329,53 +477,18 @@ public final class BlackHoleManager {
                     continue;
                 }
 
-                // The block is torn loose and GLIDES across the disc toward the core
-                // (no gravity, so vanilla's landing-place branch can never fire),
-                // then gets digested at the core.
+                // The block is digested immediately; a ghost display shrinks into
+                // nothing where it stood, so nothing ever falls back or tumbles.
                 world.breakBlock(pos, false, player, 512);
                 state.addMass(MassTables.blockMass(blockState, world, pos));
-
-                FallingBlockEntity falling = FallingBlockEntity.spawnFromBlock(world, pos, blockState);
-                falling.dropItem = false;
-                falling.setNoGravity(true);
-                double dx = mouthCenter.x - falling.getX();
-                double dz = mouthCenter.z - falling.getZ();
-                double horiz = Math.max(Math.hypot(dx, dz), 0.25);
-                double push = Math.min(0.1 + horiz * 0.06, 0.4);
-                falling.setVelocity(dx / horiz * push, 0.02, dz / horiz * push);
-                world.spawnEntity(falling);
-                state.pendingBlocks().add(falling);
+                for (ItemStack drop : LootHelper.blockLoot(world, blockState, pos)) {
+                    insertOrSpill(player, state, drop);
+                }
+                spawnShrinkingBlock(world, pos.getX(), pos.getY(), pos.getZ(), blockState);
                 world.playSound(null, pos, blockState.getSoundGroup().getBreakSound(),
                         SoundCategory.BLOCKS, 0.4f, 0.7f);
                 break;
             }
-        }
-    }
-
-    /** Blocks are digested when they reach the disc core (they never touch the ground). */
-    private static void digestPending(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
-                                      Vec3d mouthCenter) {
-        Iterator<FallingBlockEntity> iterator = state.pendingBlocks().iterator();
-        while (iterator.hasNext()) {
-            FallingBlockEntity falling = iterator.next();
-            if (falling.isRemoved()) {
-                iterator.remove();
-                continue;
-            }
-            double dx = falling.getX() - mouthCenter.x;
-            double dz = falling.getZ() - mouthCenter.z;
-            boolean arrived = dx * dx + dz * dz <= 1.0 || falling.timeFalling > 40;
-            if (!arrived) {
-                continue;
-            }
-            iterator.remove();
-            BlockState blockState = falling.getBlockState();
-            for (ItemStack drop : LootHelper.blockLoot(world, blockState, falling.getBlockPos())) {
-                insertOrSpill(player, state, drop);
-            }
-            world.spawnParticles(ParticleTypes.CLOUD,
-                    falling.getX(), falling.getY() + 0.3, falling.getZ(), 3, 0.3, 0.1, 0.3, 0.01);
-            falling.discard();
         }
     }
 

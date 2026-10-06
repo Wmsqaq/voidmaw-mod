@@ -23,6 +23,13 @@ public final class ModItems {
                     .rarity(Rarity.EPIC)
                     .fireproof()));
 
+    /** Visual-only item rendered by the hole's ItemDisplay disc; never obtainable. */
+    public static final Item HOLE_DISC = Registry.register(Registries.ITEM,
+            Identifier.of(VoidMaw.MOD_ID, "hole_disc"),
+            new Item(new Item.Settings()
+                    .registryKey(RegistryKey.of(RegistryKeys.ITEM, Identifier.of(VoidMaw.MOD_ID, "hole_disc")))
+                    .maxCount(1)));
+
     private static Item register(String name, Item item) {
         Item registered = Registry.register(Registries.ITEM, Identifier.of(VoidMaw.MOD_ID, name), item);
         ItemGroupEvents.modifyEntriesEvent(ItemGroups.INGREDIENTS).register(entries -> entries.add(registered));

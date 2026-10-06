@@ -1,12 +1,10 @@
 package com.novapupil.voidmaw.blackhole;
 
-import net.minecraft.entity.FallingBlockEntity;
-
-import java.util.ArrayList;
-import java.util.List;
+import net.minecraft.entity.decoration.DisplayEntity.ItemDisplayEntity;
 
 /**
- * Per-player black hole state: mass, absorption level and blocks still tumbling into the pit.
+ * Per-player black hole state: mass, absorption level and the display entity that
+ * draws the flat hole disc at the player's feet.
  */
 public final class BlackHoleState {
     private double mass;
@@ -16,7 +14,10 @@ public final class BlackHoleState {
     private double mouthY;
     /** Golden-angle sweep cursor so block sampling covers the disc evenly. */
     private double sweepAngle;
-    private final List<FallingBlockEntity> pendingBlocks = new ArrayList<>();
+    /** The ItemDisplay that draws the hole disc; spawned and moved by the manager. */
+    private ItemDisplayEntity discVisual;
+    /** Diameter currently applied to the disc, so level-ups animate once. */
+    private float discScale = 1.0f;
 
     BlackHoleState() {
         this.ticksLeft = Balance.BASE_DURATION_TICKS;
@@ -51,8 +52,20 @@ public final class BlackHoleState {
         return ticksLeft;
     }
 
-    public List<FallingBlockEntity> pendingBlocks() {
-        return pendingBlocks;
+    public ItemDisplayEntity discVisual() {
+        return discVisual;
+    }
+
+    void setDiscVisual(ItemDisplayEntity discVisual) {
+        this.discVisual = discVisual;
+    }
+
+    public float discScale() {
+        return discScale;
+    }
+
+    void setDiscScale(float discScale) {
+        this.discScale = discScale;
     }
 
     void addMass(double amount) {

@@ -22,6 +22,7 @@ public class VoidMawClient implements ClientModInitializer {
     public void onInitializeClient() {
         config = VoidMawConfig.load();
         BlackHoleHud.init();
+        BlackHoleRenderer.init();
 
         ClientPlayNetworking.registerGlobalReceiver(MassSyncPayload.ID, (payload, context) ->
                 context.client().execute(() -> BlackHoleRenderer.updateState(payload)));
