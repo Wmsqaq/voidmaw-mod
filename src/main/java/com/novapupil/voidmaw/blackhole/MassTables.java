@@ -54,8 +54,9 @@ public final class MassTables {
         return 0.3 + hardness * 0.15;
     }
 
-    /** Fluids have hardness 100, which would dwarf every real block - price them directly. */
+    /** Fluids have hardness 100, which would dwarf every real block - price them directly.
+     * Water is free: oceans would otherwise be an infinite mass faucet. Lava still feeds. */
     public static double liquidMass(BlockState state) {
-        return state.isOf(Blocks.LAVA) ? 1.2 : 0.3;
+        return state.isOf(Blocks.LAVA) ? 1.2 : 0.0;
     }
 }

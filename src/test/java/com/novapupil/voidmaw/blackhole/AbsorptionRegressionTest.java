@@ -36,14 +36,27 @@ public final class AbsorptionRegressionTest {
         assert DiscSweep.volume(-1, 0, -1, 0) == 4;
         assert DiscSweep.chunkX(3, -1, 2) == 0 && DiscSweep.chunkZ(3, -1, 2) == 0;
         assert DiscSweep.chunkX(0, -1, 2) == -1 && DiscSweep.chunkZ(0, -1, 2) == -1;
-        DiscSweep.Row center = DiscSweep.rowRange(0, 8, 8.0, 8.0, 2.5);
+        DiscSweep.Row center = DiscSweep.rowRange(0, 0, 8, 8.0, 8.0, 2.5);
         assert !center.empty() && center.start() <= 6 && center.endInclusive() >= 9
                 : "the column through the center must cover the circle";
-        DiscSweep.Row outside = DiscSweep.rowRange(0, 0, 8.0, 8.0, 2.5);
+        DiscSweep.Row outside = DiscSweep.rowRange(0, 0, 0, 8.0, 8.0, 2.5);
         assert outside.empty() : "columns beyond the radius must be skipped";
-        DiscSweep.Row rim = DiscSweep.rowRange(0, 6, 8.0, 8.0, 2.5);
+        DiscSweep.Row rim = DiscSweep.rowRange(0, 0, 6, 8.0, 8.0, 2.5);
         assert !rim.empty() : "the rim column at the radius edge is still inside";
-        assert MassTables.liquidMass(net.minecraft.block.Blocks.WATER.getDefaultState()) == 0.3;
+        // Asymmetric chunk coords: the z bounds must come from the chunk's Z coord,
+        // not its X coord - mixing them collapses the disc into a line along X.
+        DiscSweep.Row shifted = DiscSweep.rowRange(1, -2, 8, 24.5, -30.5, 2.5);
+        assert !shifted.empty() && shifted.start() <= 1 && shifted.endInclusive() >= 2
+                : "the center column must be covered when the chunk spans differ";
+        for (int lz = shifted.start(); lz <= shifted.endInclusive(); lz++) {
+            double worldZ = ((-2) << 4) + lz + 0.5 - (-30.5);
+            assert worldZ * worldZ <= (2.5 + 0.5) * (2.5 + 0.5)
+                    : "every row cell must sit within the circle's generous rim";
+        }
+        assert DiscSweep.rowRange(1, -2, 0, 24.5, -30.5, 2.5).empty()
+                : "columns beyond the radius must be skipped in shifted chunks too";
+        assert MassTables.liquidMass(net.minecraft.block.Blocks.WATER.getDefaultState()) == 0.0
+                : "water must be free";
         assert MassTables.liquidMass(net.minecraft.block.Blocks.LAVA.getDefaultState()) == 1.2;
         assert MassTables.liquidMass(net.minecraft.block.Blocks.LAVA.getDefaultState())
                 > MassTables.liquidMass(net.minecraft.block.Blocks.WATER.getDefaultState())

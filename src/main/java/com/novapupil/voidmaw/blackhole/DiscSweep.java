@@ -44,17 +44,19 @@ public final class DiscSweep {
     /**
      * Local z cells (0-15) of chunk column {@code localX} that fall inside the disc,
      * treating each cell center as its sample point. Slightly generous at the rim.
+     * The x distance uses the chunk's X coord while the z bounds are relative to the
+     * chunk's Z coord - mixing them up collapses the disc into a line along X.
      */
-    public static Row rowRange(int chunkCoord, int localX, double centerX, double centerZ, double radius) {
-        double dx = (chunkCoord << 4) + localX + 0.5 - centerX;
+    public static Row rowRange(int chunkX, int chunkZ, int localX, double centerX, double centerZ, double radius) {
+        double dx = (chunkX << 4) + localX + 0.5 - centerX;
         double rest = radius * radius - dx * dx;
         if (rest <= 0.0) {
             return new Row(1, 0);
         }
         double half = Math.sqrt(rest);
-        int base = chunkCoord << 4;
-        int start = MathHelper.clamp(MathHelper.floor(centerZ - half) - base, 0, 15);
-        int end = MathHelper.clamp(MathHelper.ceil(centerZ + half) - base, 0, 15);
+        int baseZ = chunkZ << 4;
+        int start = MathHelper.clamp(MathHelper.floor(centerZ - half) - baseZ, 0, 15);
+        int end = MathHelper.clamp(MathHelper.ceil(centerZ + half) - baseZ, 0, 15);
         return new Row(start, end);
     }
 }

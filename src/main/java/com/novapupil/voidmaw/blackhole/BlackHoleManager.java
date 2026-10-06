@@ -420,6 +420,9 @@ public final class BlackHoleManager {
         int bottomSection = Math.max(0, (bottom >> 4) - baseSection);
         int consumed = 0;
         int checked = 0;
+        // Spread the per-tick absorption across every chunk in the disc so no region
+        // starves while the cursor works through a dense neighbour.
+        int quota = Math.max(1, Balance.MAX_BLOCKS_PER_TICK / (int) Math.min(chunkVolume, 64));
 
         sweep:
         for (int visited = 0; visited < chunkVolume; visited++) {
@@ -439,8 +442,10 @@ public final class BlackHoleManager {
             int topSection = Math.min(highest, Math.min(sections.length - 1, (top >> 4) - baseSection));
             DiscSweep.Row[] rows = new DiscSweep.Row[16];
             for (int lx = 0; lx < 16; lx++) {
-                rows[lx] = DiscSweep.rowRange(cx, lx, centerX, centerZ, radius);
+                rows[lx] = DiscSweep.rowRange(cx, cz, lx, centerX, centerZ, radius);
             }
+            int taken = 0;
+            chunkScan:
             for (int s = bottomSection; s <= topSection; s++) {
                 ChunkSection section = sections[s];
                 if (section == null || section.isEmpty()) {
@@ -462,6 +467,9 @@ public final class BlackHoleManager {
                             if (++checked > Balance.BLOCK_SCAN_BUDGET || consumed >= Balance.MAX_BLOCKS_PER_TICK) {
                                 break sweep;
                             }
+                            if (taken >= quota) {
+                                break chunkScan;
+                            }
                             BlockState blockState = section.getBlockState(lx, ly, lz);
                             if (blockState.isAir() || blockState.isIn(MassTables.UNSWALLOWABLE)) {
                                 continue;
@@ -471,6 +479,7 @@ public final class BlackHoleManager {
                                 continue;
                             }
                             if (absorbBlock(world, player, state, blockState, pos)) {
+                                taken++;
                                 consumed++;
                             }
                         }

@@ -75,8 +75,7 @@ public final class BlackHoleHud implements HudElement {
                                 String.format(Locale.ROOT, "%.0f", next));
         int remainingTicks = active ? hole.remainingTicks() : 0;
         String secondsLeft = remainingTicks < 0 ? "?" : Integer.toString((remainingTicks + 19) / 20);
-        Text stats = Text.translatable("hud.voidmaw.mass",
-                String.format(Locale.ROOT, "%.1f", active ? hole.mass() : 0.0),
+        Text stats = Text.translatable("hud.voidmaw.stats",
                 String.format(Locale.ROOT, "%.1f", active ? hole.radius() : 0.0),
                 secondsLeft);
 
@@ -110,8 +109,9 @@ public final class BlackHoleHud implements HudElement {
         if (active) {
             double base = HoleLevel.levelThreshold(hole.level());
             double progress = MathHelper.clamp((hole.mass() - base) / (next - base), 0.0, 1.0);
-            context.fill(PADDING, barY, PADDING + BAR_WIDTH, barY + BAR_HEIGHT, COLOR_BAR_BG);
-            context.fill(PADDING, barY, PADDING + (int) (BAR_WIDTH * progress), barY + BAR_HEIGHT, COLOR_BAR_FILL);
+            // The bar spans the full panel interior so it always matches the HUD width.
+            context.fill(PADDING, barY, PADDING + contentWidth, barY + BAR_HEIGHT, COLOR_BAR_BG);
+            context.fill(PADDING, barY, PADDING + (int) (contentWidth * progress), barY + BAR_HEIGHT, COLOR_BAR_FILL);
         }
 
         context.drawText(textRenderer, stats, PADDING, barY + BAR_HEIGHT + 3, COLOR_STATS, true);
