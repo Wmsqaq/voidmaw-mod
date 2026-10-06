@@ -2,7 +2,6 @@
   "item.voidmaw.singularity_core": "Singularity Core",
   "item.voidmaw.hole_disc": "Void Maw Disc",
   "commands.voidmaw.started": "§dRight-click to close · Shift+right-click to detonate",
-  "title.voidmaw.started": "§5Void Maw",
   "title.voidmaw.started_hint": "§dRight-click to close · Shift+right-click to detonate",
   "commands.voidmaw.stopped": "§5The maw closed · retained %s",
   "commands.voidmaw.mass_lost": "§5Death · %s mass scattered",

@@ -2,7 +2,6 @@
   "item.voidmaw.singularity_core": "奇点核心",
   "item.voidmaw.hole_disc": "虚空之喉圆盘",
   "commands.voidmaw.started": "§d右键闭合 · Shift+右键自爆",
-  "title.voidmaw.started": "§5虚空之喉",
   "title.voidmaw.started_hint": "§d右键闭合 · Shift+右键自爆",
   "commands.voidmaw.stopped": "§5黑洞已闭合 · 保留 %s",
   "commands.voidmaw.mass_lost": "§5死亡 · %s 点质量消散",

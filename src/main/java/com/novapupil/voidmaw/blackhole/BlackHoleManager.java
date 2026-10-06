@@ -78,16 +78,18 @@ public final class BlackHoleManager {
         ACTIVE.put(player.getUuid(), state);
         world(player).playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDER_DRAGON_GROWL,
                 SoundCategory.PLAYERS, 0.8f, 0.6f);
-        showTitle(player, Text.translatable("title.voidmaw.started"),
-                Text.translatable("title.voidmaw.started_hint"));
+        showHint(player, Text.translatable("title.voidmaw.started_hint"));
         sync(player);
     }
 
-    /** Center-screen title for one-off dramatic moments; fade keeps it unobtrusive. */
-    private static void showTitle(ServerPlayerEntity player, Text title, Text subtitle) {
+    /**
+     * Subtitle-position hint with an EMPTY title: vanilla only renders a subtitle
+     * alongside a title packet, and an empty title keeps the big center text clear.
+     */
+    private static void showHint(ServerPlayerEntity player, Text subtitle) {
         player.networkHandler.sendPacket(new TitleFadeS2CPacket(5, 40, 10));
         player.networkHandler.sendPacket(new SubtitleS2CPacket(subtitle));
-        player.networkHandler.sendPacket(new TitleS2CPacket(title));
+        player.networkHandler.sendPacket(new TitleS2CPacket(Text.empty()));
     }
 
     /**
