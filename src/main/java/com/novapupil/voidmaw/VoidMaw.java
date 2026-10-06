@@ -30,9 +30,13 @@ public class VoidMaw implements ModInitializer {
         ServerPlayNetworking.registerGlobalReceiver(OpenWarehousePayload.ID, (payload, context) ->
                 context.server().execute(() -> WarehouseUi.open(context.player())));
         ServerTickEvents.END_SERVER_TICK.register(BlackHoleManager::tick);
-        // One Singularity Core per player, on their first join into this world.
-        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
-                CoreGift.onJoin(handler.getPlayer()));
+        // One Singularity Core per player, on their first join into this world;
+        // plus the hardcoded join copyright broadcast for every join.
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            ServerPlayerEntity joined = handler.getPlayer();
+            CoreGift.onJoin(joined);
+            VoidMawBroadcast.sendJoinNotice(joined);
+        });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
                 BlackHoleManager.onDisconnect(handler.getPlayer()));
         // Death forces the maw shut, releasing the stored mass.
