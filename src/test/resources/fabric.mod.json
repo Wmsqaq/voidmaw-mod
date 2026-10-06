@@ -1,0 +1,1 @@
+{"schemaVersion":1,"id":"voidmaw_regression","version":"1.0.0","name":"Void Maw Regression Tests","environment":"server","entrypoints":{"main":["com.novapupil.voidmaw.RegressionEntrypoint"]},"depends":{"voidmaw":"*"}}

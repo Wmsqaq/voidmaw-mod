@@ -13,18 +13,17 @@ public final class VoidMawCommand {
 
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
         dispatcher.register(CommandManager.literal("voidmaw")
-                .requires(source -> source.hasPermissionLevel(2))
-                .then(CommandManager.literal("start").executes(ctx -> {
+                .then(CommandManager.literal("start").requires(source -> source.hasPermissionLevel(2)).executes(ctx -> {
                     ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
                     BlackHoleManager.start(player);
                     return 1;
                 }))
-                .then(CommandManager.literal("stop").executes(ctx -> {
+                .then(CommandManager.literal("stop").requires(source -> source.hasPermissionLevel(2)).executes(ctx -> {
                     ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
                     BlackHoleManager.stop(player, false);
                     return 1;
                 }))
-                .then(CommandManager.literal("detonate").executes(ctx -> {
+                .then(CommandManager.literal("detonate").requires(source -> source.hasPermissionLevel(2)).executes(ctx -> {
                     ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
                     BlackHoleManager.stop(player, true);
                     return 1;

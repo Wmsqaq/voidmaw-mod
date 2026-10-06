@@ -1,7 +1,7 @@
 {
   "textures": {
-    "disc": "voidmaw:hole_disc",
-    "particle": "voidmaw:hole_disc"
+    "disc": "voidmaw:item/hole_disc",
+    "particle": "voidmaw:item/hole_disc"
   },
   "elements": [
     {

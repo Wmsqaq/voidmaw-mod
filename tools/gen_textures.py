@@ -15,7 +15,7 @@ import zlib
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ITEM_OUT = os.path.join(ROOT, "src/main/resources/assets/voidmaw/textures/item/singularity_core.png")
 ICON_OUT = os.path.join(ROOT, "src/main/resources/assets/voidmaw/icon.png")
-DISC_OUT = os.path.join(ROOT, "src/main/resources/assets/voidmaw/textures/hole_disc.png")
+DISC_OUT = os.path.join(ROOT, "src/main/resources/assets/voidmaw/textures/item/hole_disc.png")
 
 
 def write_png(path, width, height, rows):

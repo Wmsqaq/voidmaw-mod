@@ -48,13 +48,14 @@ public final class BlackHoleHud implements HudElement {
 
     @Override
     public void render(DrawContext context, RenderTickCounter tickCounter) {
+        clearBounds();
         MinecraftClient client = MinecraftClient.getInstance();
         VoidMawConfig config = VoidMawClient.config;
         if (client.player == null || config == null) {
             return;
         }
         boolean editMode = client.currentScreen instanceof HudEditScreen;
-        if (!config.hudVisible && !editMode) {
+        if ((!config.hudVisible || client.options.hudHidden) && !editMode) {
             return;
         }
         BlackHoleRenderer.Hole hole = BlackHoleRenderer.viewOf(client.player.getUuid());
@@ -75,7 +76,8 @@ public final class BlackHoleHud implements HudElement {
                                 hole.level(),
                                 String.format(Locale.ROOT, "%.0f", hole.mass()),
                                 String.format(Locale.ROOT, "%.0f", next));
-        int secondsLeft = active ? Math.max(1, (hole.ticksLeft() + 19) / 20) : 0;
+        int remainingTicks = active ? hole.remainingTicks() : 0;
+        String secondsLeft = remainingTicks < 0 ? "?" : Integer.toString((remainingTicks + 19) / 20);
         Text stats = Text.translatable("hud.voidmaw.mass",
                 String.format(Locale.ROOT, "%.1f", active ? hole.mass() : 0.0),
                 String.format(Locale.ROOT, "%.1f", active ? hole.radius() : 0.0),
@@ -145,9 +147,19 @@ public final class BlackHoleHud implements HudElement {
     static void dragTo(int mouseX, int mouseY) {
         VoidMawConfig config = VoidMawClient.config;
         if (config != null) {
-            config.hudX = mouseX - dragOffsetX;
-            config.hudY = mouseY - dragOffsetY;
+            MinecraftClient client = MinecraftClient.getInstance();
+            config.hudX = MathHelper.clamp(mouseX - dragOffsetX, 0,
+                    Math.max(0, client.getWindow().getScaledWidth() - RECT[2]));
+            config.hudY = MathHelper.clamp(mouseY - dragOffsetY, 0,
+                    Math.max(0, client.getWindow().getScaledHeight() - RECT[3]));
         }
+    }
+
+    static void clearBounds() {
+        RECT[0] = -1;
+        RECT[1] = -1;
+        RECT[2] = 0;
+        RECT[3] = 0;
     }
 
     static void resetPosition() {

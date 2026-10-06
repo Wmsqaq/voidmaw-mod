@@ -24,12 +24,12 @@ public final class CoreGift {
         if (state.alreadyGranted(playerId)) {
             return;
         }
-        state.markGranted(playerId);
-
         ItemStack stack = new ItemStack(ModItems.SINGULARITY_CORE);
-        if (!player.getInventory().insertStack(stack)) {
-            player.dropItem(stack, false);
+        player.getInventory().insertStack(stack);
+        if (!stack.isEmpty() && player.dropItem(stack, false) == null) {
+            return;
         }
+        state.markGranted(playerId);
         player.sendMessage(Text.translatable("commands.voidmaw.gift_received"), false);
     }
 }

@@ -43,3 +43,17 @@ java {
 jar {
     from('LICENSE')
 }
+
+tasks.register('regressionTest', JavaExec) {
+    dependsOn testClasses, configureLaunch, generateRemapClasspath
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'net.fabricmc.loader.impl.launch.knot.KnotServer'
+    workingDir = layout.buildDirectory.dir('regression-run').get().asFile
+    jvmArgs '-ea', '-Dvoidmaw.regression=true', '-Dfabric.development=true',
+            '-Dfabric.defaultModDistributionNamespace=intermediary',
+            "-Dfabric.remapClasspathFile=${projectDir}/.gradle/loom-cache/remapClasspath.txt"
+    doFirst { workingDir.mkdirs() }
+}
+tasks.named('check') { dependsOn regressionTest }
+// Regression mains run under Knot so Minecraft access transformations are applied.
+tasks.named('test') { failOnNoDiscoveredTests = false }

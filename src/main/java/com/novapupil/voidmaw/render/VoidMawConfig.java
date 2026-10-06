@@ -4,6 +4,8 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.novapupil.voidmaw.VoidMaw;
 
+import net.fabricmc.loader.api.FabricLoader;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -15,7 +17,7 @@ public class VoidMawConfig {
     public float hudScale = 1.0f;
     public boolean hudVisible = true;
 
-    private static final Path FILE = Path.of("config", "voidmaw.json");
+    private static final Path FILE = FabricLoader.getInstance().getConfigDir().resolve("voidmaw.json");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     public static VoidMawConfig load() {
@@ -23,6 +25,7 @@ public class VoidMawConfig {
             if (Files.exists(FILE)) {
                 VoidMawConfig config = GSON.fromJson(Files.readString(FILE), VoidMawConfig.class);
                 if (config != null) {
+                    config.normalize();
                     return config;
                 }
             }
@@ -32,7 +35,17 @@ public class VoidMawConfig {
         return new VoidMawConfig();
     }
 
+    public void normalize() {
+        hudX = Math.max(-1, hudX);
+        hudY = Math.max(-1, hudY);
+        hudScale = Float.isFinite(hudScale) ? Math.clamp(hudScale, 0.5f, 4.0f) : 1.0f;
+    }
+
     public static void save(VoidMawConfig config) {
+        if (config == null) {
+            return;
+        }
+        config.normalize();
         try {
             Files.createDirectories(FILE.getParent());
             Path tmp = FILE.resolveSibling(FILE.getFileName() + ".tmp");

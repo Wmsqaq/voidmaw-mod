@@ -70,7 +70,7 @@ public class WarehouseScreenHandler extends GenericContainerScreenHandler {
             this.sendContentUpdates();
             return;
         }
-        if (slotIndex >= RESERVED_START) {
+        if (slotIndex >= RESERVED_START && slotIndex < BlackHoleWarehouse.SIZE) {
             return;
         }
         super.onSlotClick(slotIndex, button, actionType, player);
@@ -89,23 +89,22 @@ public class WarehouseScreenHandler extends GenericContainerScreenHandler {
 
     /** Refreshes the navigation row of the current page. */
     private void decorate() {
-        DefaultedList<ItemStack> view = warehouse.page(page);
-        view.set(PREV_SLOT, page > 0
+        Inventory view = pages;
+        view.setStack(PREV_SLOT, page > 0
                 ? named(Items.ARROW, Text.translatable("container.voidmaw.prev"))
                 : ItemStack.EMPTY);
-        view.set(INFO_SLOT, named(Items.PAPER,
+        view.setStack(INFO_SLOT, named(Items.PAPER,
                 Text.translatable("container.voidmaw.page", page + 1, warehouse.pageCount())));
-        view.set(NEXT_SLOT, page < warehouse.pageCount() - 1
+        view.setStack(NEXT_SLOT, page < warehouse.pageCount() - 1
                 ? named(Items.SPECTRAL_ARROW, Text.translatable("container.voidmaw.next"))
                 : ItemStack.EMPTY);
-        view.set(SORT_SLOT, named(Items.CHEST, Text.translatable("container.voidmaw.sort")));
+        view.setStack(SORT_SLOT, named(Items.CHEST, Text.translatable("container.voidmaw.sort")));
         ItemStack filler = named(Items.GRAY_STAINED_GLASS_PANE, Text.literal(" "));
         for (int i = RESERVED_START; i < BlackHoleWarehouse.SIZE; i++) {
             if (i != PREV_SLOT && i != INFO_SLOT && i != NEXT_SLOT && i != SORT_SLOT) {
-                view.set(i, filler.copy());
+                view.setStack(i, filler.copy());
             }
         }
-        warehouse.markDirty();
     }
 
     private static ItemStack named(Item item, Text name) {
@@ -118,6 +117,11 @@ public class WarehouseScreenHandler extends GenericContainerScreenHandler {
     private static class ReservedSlot extends Slot {
         ReservedSlot(Inventory inventory, int index, int x, int y) {
             super(inventory, index, x, y);
+        }
+
+        @Override
+        public boolean canTakeItems(PlayerEntity player) {
+            return false;
         }
 
         @Override

@@ -33,19 +33,19 @@ public final class HoleLevel {
     }
 
     public static double radiusFor(int level) {
-        return RADII[level - 1];
+        return RADII[Math.clamp(level, MIN, MAX) - 1];
     }
 
     public static float maxBlockHardnessFor(int level) {
-        return MAX_BLOCK_HARDNESS[level - 1];
+        return MAX_BLOCK_HARDNESS[Math.clamp(level, MIN, MAX) - 1];
     }
 
     public static double maxEntitySizeFor(int level) {
-        return MAX_ENTITY_SIZE[level - 1];
+        return MAX_ENTITY_SIZE[Math.clamp(level, MIN, MAX) - 1];
     }
 
     public static float explosionPowerFor(int level) {
-        return EXPLOSION_POWER[level - 1];
+        return EXPLOSION_POWER[Math.clamp(level, MIN, MAX) - 1];
     }
 
     /** Mass required to be at the given level (progress bar base). */
@@ -55,6 +55,6 @@ public final class HoleLevel {
 
     /** Mass still needed for the next level, or -1 at max level. */
     public static double nextLevelMass(int level) {
-        return level < MAX ? MASS_THRESHOLDS[level] : -1;
+        return level < MAX ? MASS_THRESHOLDS[Math.clamp(level, MIN, MAX)] : -1;
     }
 }

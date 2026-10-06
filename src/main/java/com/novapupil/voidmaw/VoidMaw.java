@@ -11,6 +11,8 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import com.novapupil.voidmaw.warehouse.BlackHoleWarehouse;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -26,10 +28,18 @@ public class VoidMaw implements ModInitializer {
     public void onInitialize() {
         ModItems.register();
         PayloadTypeRegistry.playS2C().register(MassSyncPayload.ID, MassSyncPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(MassSyncPayload.LEGACY_ID, MassSyncPayload.LEGACY_CODEC);
         PayloadTypeRegistry.playC2S().register(OpenWarehousePayload.ID, OpenWarehousePayload.CODEC);
+        // The typed receiver already runs on the server thread. Handle it before
+        // a disconnect can leave a queued request holding an obsolete player.
         ServerPlayNetworking.registerGlobalReceiver(OpenWarehousePayload.ID, (payload, context) ->
-                context.server().execute(() -> WarehouseUi.open(context.player())));
+                WarehouseUi.open(context.player()));
         ServerTickEvents.END_SERVER_TICK.register(BlackHoleManager::tick);
+        ServerLifecycleEvents.SERVER_STOPPING.register(BlackHoleWarehouse::flushAll);
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            BlackHoleManager.reset();
+            BlackHoleWarehouse.unload(server);
+        });
         // One Singularity Core per player, on their first join into this world;
         // plus the hardcoded join copyright broadcast for every join.
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {

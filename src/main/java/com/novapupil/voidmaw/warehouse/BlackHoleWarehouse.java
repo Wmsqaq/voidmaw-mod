@@ -11,11 +11,14 @@ import com.novapupil.voidmaw.VoidMaw;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryOps;
+import net.minecraft.registry.RegistryWrapper;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.WorldSavePath;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -39,27 +42,32 @@ public final class BlackHoleWarehouse {
     /** Slots at/above this index in a page are GUI controls, not storage. */
     public static final int RESERVED_START = 45;
 
-    private static final Map<UUID, BlackHoleWarehouse> LOADED = new HashMap<>();
+    private static final Map<MinecraftServer, Map<UUID, BlackHoleWarehouse>> LOADED = new java.util.IdentityHashMap<>();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     private final UUID owner;
-    private final MinecraftServer server;
+    private final RegistryWrapper.WrapperLookup registries;
     private final Path file;
     private final List<net.minecraft.util.collection.DefaultedList<ItemStack>> pages = new ArrayList<>();
     private boolean dirty;
+    private boolean loadFailed;
 
     private BlackHoleWarehouse(MinecraftServer server, UUID owner) {
-        this.server = server;
+        this(server.getRegistryManager(), server.getSavePath(WorldSavePath.ROOT)
+                .resolve("data/voidmaw/warehouses/" + owner + ".json"), owner);
+    }
+
+    BlackHoleWarehouse(RegistryWrapper.WrapperLookup registries, Path file, UUID owner) {
+        this.registries = registries;
         this.owner = owner;
-        this.file = server.getSavePath(WorldSavePath.ROOT)
-                .resolve("data/voidmaw/warehouses/" + owner + ".json");
+        this.file = file;
         for (int p = 0; p < PAGES; p++) {
             pages.add(net.minecraft.util.collection.DefaultedList.ofSize(SIZE, ItemStack.EMPTY));
         }
     }
 
     public static BlackHoleWarehouse get(MinecraftServer server, UUID owner) {
-        return LOADED.computeIfAbsent(owner, id -> {
+        return LOADED.computeIfAbsent(server, ignored -> new HashMap<>()).computeIfAbsent(owner, id -> {
             BlackHoleWarehouse warehouse = new BlackHoleWarehouse(server, id);
             warehouse.load();
             return warehouse;
@@ -79,6 +87,9 @@ public final class BlackHoleWarehouse {
         if (stack == null || stack.isEmpty()) {
             return ItemStack.EMPTY;
         }
+        if (loadFailed) {
+            return stack.copy();
+        }
         ItemStack remainder = stack.copy();
         for (int p = 0; p < PAGES && !remainder.isEmpty(); p++) {
             net.minecraft.util.collection.DefaultedList<ItemStack> page = pages.get(p);
@@ -96,7 +107,7 @@ public final class BlackHoleWarehouse {
             }
             for (int i = 0; i < RESERVED_START && !remainder.isEmpty(); i++) {
                 if (page.get(i).isEmpty()) {
-                    page.set(i, remainder.split(remainder.getCount()));
+                    page.set(i, remainder.split(Math.min(remainder.getCount(), remainder.getMaxCount())));
                     markDirty();
                 }
             }
@@ -159,25 +170,40 @@ public final class BlackHoleWarehouse {
     }
 
     public void flushIfDirty() {
-        if (dirty) {
-            save();
+        if (dirty && !loadFailed && save()) {
             dirty = false;
         }
     }
 
     public static void flushAll() {
-        for (BlackHoleWarehouse warehouse : LOADED.values()) {
-            warehouse.flushIfDirty();
+        for (Map<UUID, BlackHoleWarehouse> warehouses : LOADED.values()) {
+            for (BlackHoleWarehouse warehouse : warehouses.values()) {
+                warehouse.flushIfDirty();
+            }
         }
     }
 
-    private void save() {
+    public static void flushAll(MinecraftServer server) {
+        Map<UUID, BlackHoleWarehouse> warehouses = LOADED.get(server);
+        if (warehouses != null) {
+            warehouses.values().forEach(BlackHoleWarehouse::flushIfDirty);
+        }
+    }
+
+    /** Release every world-bound reference when an integrated or dedicated server stops. */
+    public static void unload(MinecraftServer server) {
+        flushAll(server);
+        LOADED.remove(server);
+    }
+
+    private boolean save() {
+        Path temporary = null;
         try {
-            RegistryOps<JsonElement> ops = RegistryOps.of(JsonOps.INSTANCE, server.getRegistryManager());
+            RegistryOps<JsonElement> ops = RegistryOps.of(JsonOps.INSTANCE, registries);
             JsonArray items = new JsonArray();
             for (int p = 0; p < PAGES; p++) {
                 net.minecraft.util.collection.DefaultedList<ItemStack> page = pages.get(p);
-                for (int i = 0; i < SIZE; i++) {
+                for (int i = 0; i < RESERVED_START; i++) {
                     ItemStack stack = page.get(i);
                     if (stack.isEmpty()) {
                         continue;
@@ -185,8 +211,7 @@ public final class BlackHoleWarehouse {
                     JsonObject entry = new JsonObject();
                     entry.addProperty("page", p);
                     entry.addProperty("slot", i);
-                    ItemStack.CODEC.encodeStart(ops, stack).result()
-                            .ifPresent(encoded -> entry.add("item", encoded));
+                    entry.add("item", ItemStack.CODEC.encodeStart(ops, stack).getOrThrow());
                     items.add(entry);
                 }
             }
@@ -195,30 +220,67 @@ public final class BlackHoleWarehouse {
             root.addProperty("pages", PAGES);
             root.add("items", items);
             Files.createDirectories(file.getParent());
-            Files.writeString(file, GSON.toJson(root));
-        } catch (IOException ex) {
+            temporary = Files.createTempFile(file.getParent(), owner + "-", ".tmp");
+            Files.writeString(temporary, GSON.toJson(root));
+            try {
+                Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException ex) {
+                Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
+            }
+            return true;
+        } catch (IOException | RuntimeException ex) {
             VoidMaw.LOGGER.warn("Failed to save voidmaw warehouse for {}: {}", owner, ex.toString());
+            return false;
+        } finally {
+            if (temporary != null) {
+                try {
+                    Files.deleteIfExists(temporary);
+                } catch (IOException ex) {
+                    VoidMaw.LOGGER.warn("Failed to remove temporary warehouse file {}: {}", temporary, ex.toString());
+                }
+            }
         }
     }
 
-    private void load() {
+    void load() {
         if (!Files.exists(file)) {
             return;
         }
         try {
-            RegistryOps<JsonElement> ops = RegistryOps.of(JsonOps.INSTANCE, server.getRegistryManager());
+            RegistryOps<JsonElement> ops = RegistryOps.of(JsonOps.INSTANCE, registries);
             JsonObject root = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
             JsonArray items = root.getAsJsonArray("items");
+            List<net.minecraft.util.collection.DefaultedList<ItemStack>> loaded = new ArrayList<>();
+            for (int p = 0; p < PAGES; p++) {
+                loaded.add(net.minecraft.util.collection.DefaultedList.ofSize(SIZE, ItemStack.EMPTY));
+            }
             for (JsonElement element : items) {
                 JsonObject entry = element.getAsJsonObject();
                 // Legacy saves had no "page" field; everything lands on page 0.
-                int page = Math.clamp(entry.has("page") ? entry.get("page").getAsInt() : 0, 0, PAGES - 1);
-                int slot = Math.clamp(entry.get("slot").getAsInt(), 0, SIZE - 1);
-                ItemStack.CODEC.parse(ops, entry.get("item")).result()
-                        .ifPresent(stack -> pages.get(page).set(slot, stack));
+                int page = entry.has("page") ? entry.get("page").getAsInt() : 0;
+                int slot = entry.get("slot").getAsInt();
+                if (page < 0 || page >= PAGES || slot < 0 || slot >= SIZE) {
+                    throw new IllegalArgumentException("Invalid warehouse position: " + page + "/" + slot);
+                }
+                // Older versions wrote decorative controls into their warehouse files.
+                if (slot >= RESERVED_START) {
+                    continue;
+                }
+                if (!loaded.get(page).get(slot).isEmpty()) {
+                    throw new IllegalArgumentException("Duplicate warehouse position: " + page + "/" + slot);
+                }
+                loaded.get(page).set(slot, ItemStack.CODEC.parse(ops, entry.get("item")).getOrThrow());
             }
-        } catch (IOException | IllegalStateException | ClassCastException ex) {
-            VoidMaw.LOGGER.warn("Failed to load voidmaw warehouse for {}: {}", owner, ex.toString());
+            for (int p = 0; p < PAGES; p++) {
+                for (int i = 0; i < RESERVED_START; i++) {
+                    pages.get(p).set(i, loaded.get(p).get(i));
+                }
+            }
+            loadFailed = false;
+        } catch (IOException | RuntimeException ex) {
+            loadFailed = true;
+            VoidMaw.LOGGER.warn("Failed to load voidmaw warehouse for {}; original file will not be overwritten: {}",
+                    owner, ex.toString());
         }
     }
 }

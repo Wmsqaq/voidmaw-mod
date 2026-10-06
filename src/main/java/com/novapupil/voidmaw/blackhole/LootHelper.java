@@ -1,6 +1,7 @@
 package com.novapupil.voidmaw.blackhole;
 
 import net.minecraft.block.BlockState;
+import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -40,11 +41,17 @@ public final class LootHelper {
     }
 
     public static List<ItemStack> blockLoot(ServerWorld world, BlockState state, BlockPos pos) {
+        return blockLoot(world, state, pos, world.getBlockEntity(pos));
+    }
+
+    /** Must be called before removing the block, while its loot components still exist. */
+    public static List<ItemStack> blockLoot(ServerWorld world, BlockState state, BlockPos pos, BlockEntity blockEntity) {
         return state.getBlock().getLootTableKey()
                 .map(key -> generate(world, key, LootContextTypes.BLOCK, builder -> {
                     builder.add(LootContextParameters.BLOCK_STATE, state);
                     builder.add(LootContextParameters.ORIGIN, new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5));
                     builder.add(LootContextParameters.TOOL, DEFAULT_TOOL);
+                    builder.addOptional(LootContextParameters.BLOCK_ENTITY, blockEntity);
                 }))
                 .orElse(List.of());
     }

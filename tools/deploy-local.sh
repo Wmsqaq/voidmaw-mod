@@ -15,9 +15,14 @@ JAR="build/libs/voidmaw-${VERSION}.jar"
 [ -f "$JAR" ] || { echo "missing $JAR - run 'gradlew build' first"; exit 1; }
 [ -d "$MODS" ] || { echo "mods folder not found: $MODS"; exit 1; }
 
-# Remove every older voidmaw jar from the instance, then copy the new one.
-rm -f "$MODS"/voidmaw-*.jar
-cp "$JAR" "$MODS"/
+# Finish and verify the copy before removing the previous installed version.
+TARGET="$MODS/$(basename "$JAR")"
+cp "$JAR" "$TARGET.tmp"
+cmp -s "$JAR" "$TARGET.tmp"
+mv -f "$TARGET.tmp" "$TARGET"
+for old in "$MODS"/voidmaw-*.jar; do
+    [ "$old" = "$TARGET" ] || rm -f "$old"
+done
 
 echo "deployed voidmaw-${VERSION} -> $MODS"
 ls "$MODS" | grep voidmaw || true

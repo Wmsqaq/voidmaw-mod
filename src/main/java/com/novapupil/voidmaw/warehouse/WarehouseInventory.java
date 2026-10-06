@@ -13,6 +13,8 @@ import net.minecraft.util.collection.DefaultedList;
 public class WarehouseInventory implements Inventory {
     private final BlackHoleWarehouse warehouse;
     private DefaultedList<ItemStack> view;
+    private final DefaultedList<ItemStack> controls = DefaultedList.ofSize(
+            BlackHoleWarehouse.SIZE - BlackHoleWarehouse.RESERVED_START, ItemStack.EMPTY);
 
     public WarehouseInventory(BlackHoleWarehouse warehouse, DefaultedList<ItemStack> view) {
         this.warehouse = warehouse;
@@ -30,8 +32,8 @@ public class WarehouseInventory implements Inventory {
 
     @Override
     public boolean isEmpty() {
-        for (ItemStack stack : view) {
-            if (!stack.isEmpty()) {
+        for (int i = 0; i < BlackHoleWarehouse.RESERVED_START; i++) {
+            if (!view.get(i).isEmpty()) {
                 return false;
             }
         }
@@ -40,11 +42,15 @@ public class WarehouseInventory implements Inventory {
 
     @Override
     public ItemStack getStack(int slot) {
-        return view.get(slot);
+        return slot < BlackHoleWarehouse.RESERVED_START ? view.get(slot)
+                : controls.get(slot - BlackHoleWarehouse.RESERVED_START);
     }
 
     @Override
     public ItemStack removeStack(int slot, int amount) {
+        if (slot >= BlackHoleWarehouse.RESERVED_START) {
+            return ItemStack.EMPTY;
+        }
         ItemStack removed = Inventories.splitStack(view, slot, amount);
         if (!removed.isEmpty()) {
             markDirty();
@@ -54,6 +60,9 @@ public class WarehouseInventory implements Inventory {
 
     @Override
     public ItemStack removeStack(int slot) {
+        if (slot >= BlackHoleWarehouse.RESERVED_START) {
+            return ItemStack.EMPTY;
+        }
         ItemStack removed = Inventories.removeStack(view, slot);
         if (!removed.isEmpty()) {
             markDirty();
@@ -63,6 +72,10 @@ public class WarehouseInventory implements Inventory {
 
     @Override
     public void setStack(int slot, ItemStack stack) {
+        if (slot >= BlackHoleWarehouse.RESERVED_START) {
+            controls.set(slot - BlackHoleWarehouse.RESERVED_START, stack);
+            return;
+        }
         view.set(slot, stack);
         markDirty();
     }
@@ -79,7 +92,7 @@ public class WarehouseInventory implements Inventory {
 
     @Override
     public void clear() {
-        for (int i = 0; i < view.size(); i++) {
+        for (int i = 0; i < BlackHoleWarehouse.RESERVED_START; i++) {
             view.set(i, ItemStack.EMPTY);
         }
         markDirty();

@@ -10,7 +10,7 @@ public final class BlackHoleState {
     private double mass;
     private int ticksLeft;
     private int level = HoleLevel.MIN;
-    /** Ground level the pit mouth is anchored to (latched, not the live player Y). */
+    /** Mouth plane follows the player's feet, including slabs and stairs. */
     private double mouthY;
     /** Golden-angle sweep cursor so block sampling covers the disc evenly. */
     private double sweepAngle;
