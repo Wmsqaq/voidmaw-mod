@@ -48,6 +48,11 @@ public final class HoleLevel {
         return EXPLOSION_POWER[level - 1];
     }
 
+    /** Mass required to be at the given level (progress bar base). */
+    public static double levelThreshold(int level) {
+        return MASS_THRESHOLDS[Math.clamp(level, MIN, MAX) - 1];
+    }
+
     /** Mass still needed for the next level, or -1 at max level. */
     public static double nextLevelMass(int level) {
         return level < MAX ? MASS_THRESHOLDS[level] : -1;

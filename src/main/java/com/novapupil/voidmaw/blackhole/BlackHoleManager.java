@@ -154,14 +154,12 @@ public final class BlackHoleManager {
 
             ServerWorld world = (ServerWorld) player.getEntityWorld();
 
-            // The mouth plane sits exactly at the player's feet. NOTHING below it is
-            // ever touched - the hole is a flat disc of annihilation lying on the
-            // ground, devouring whatever rises above the plane inside its radius.
-            double mouth = state.mouthY();
-            if (player.getY() >= mouth - 0.5) {
-                mouth = surfaceUnder(world, player, mouth);
-                state.setMouthY(mouth);
-            }
+            // The mouth plane always re-anchors to the surface underfoot, so walking
+            // into tunnels or caves drags it down with you instead of leaving it
+            // floating at head height. The scan starts below the eyes and runs
+            // downward, so low ceilings are never mistaken for the surface.
+            double mouth = surfaceUnder(world, player, state.mouthY());
+            state.setMouthY(mouth);
 
             int level = HoleLevel.levelFor(state.mass());
             if (level > state.level()) {
@@ -212,7 +210,7 @@ public final class BlackHoleManager {
         int x = player.getBlockX();
         int z = player.getBlockZ();
         int top = MathHelper.floor(player.getY()) + 1;
-        int bottom = Math.max(world.getBottomY(), MathHelper.floor(player.getY()) - 12);
+        int bottom = Math.max(world.getBottomY(), MathHelper.floor(player.getY()) - 16);
         for (int y = top; y >= bottom; y--) {
             BlockState state = world.getBlockState(new BlockPos(x, y, z));
             if (!state.isAir() && state.getFluidState().isEmpty() && !state.isReplaceable()) {

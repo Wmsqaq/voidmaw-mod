@@ -13,5 +13,7 @@
   "container.voidmaw.page": "§ePage %s / %s",
   "container.voidmaw.prev": "§a◀ Previous page",
   "container.voidmaw.next": "§aNext page ▶",
-  "hud.voidmaw.mass": "Lv.%s | Mass %s | Radius %s blocks"
+  "hud.voidmaw.level": "Black Hole Lv.%s · %s/%s",
+  "hud.voidmaw.level_max": "Black Hole Lv.%s · MAX",
+  "hud.voidmaw.mass": "Mass %s · Radius %s blocks"
 }

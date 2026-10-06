@@ -13,5 +13,7 @@
   "container.voidmaw.page": "§e第 %s / %s 页",
   "container.voidmaw.prev": "§a◀ 上一页",
   "container.voidmaw.next": "§a下一页 ▶",
-  "hud.voidmaw.mass": "Lv.%s · 质量 %s · 半径 %s 格"
+  "hud.voidmaw.level": "黑洞 Lv.%s · %s/%s",
+  "hud.voidmaw.level_max": "黑洞 Lv.%s · 满级",
+  "hud.voidmaw.mass": "质量 %s · 半径 %s 格"
 }
