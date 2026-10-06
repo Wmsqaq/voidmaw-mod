@@ -19,18 +19,14 @@ public final class Balance {
     /** Anything whose distance squared to the core is below this gets swallowed. */
     public static final double DEVOUR_DISTANCE_SQ = 1.4 * 1.4;
 
-    /** Block devouring: random column samples every few ticks. */
-    public static final int BASE_BLOCK_ATTEMPTS = 1;
-    public static final int MAX_BLOCK_ATTEMPTS = 6;
+    /** Work budgets keep full-height absorption from blocking the server tick. */
+    public static final int BLOCK_SCAN_BUDGET = 4096;
+    public static final int MAX_BLOCKS_PER_TICK = 8;
 
     /** Hand every player one Singularity Core the first time they enter the world. */
     public static final boolean GIVE_CORE_ON_FIRST_JOIN = true;
 
     public static double pullSpeedFor(int level) {
-        return PULL_SPEED_BASE + level * PULL_SPEED_PER_LEVEL;
-    }
-
-    public static int blockAttemptsFor(double mass) {
-        return (int) Math.min(BASE_BLOCK_ATTEMPTS + mass / 40.0, MAX_BLOCK_ATTEMPTS);
+        return Math.min(0.8, PULL_SPEED_BASE + level * PULL_SPEED_PER_LEVEL);
     }
 }

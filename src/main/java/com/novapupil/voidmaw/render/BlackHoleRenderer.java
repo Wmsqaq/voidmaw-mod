@@ -4,22 +4,14 @@ import com.novapupil.voidmaw.net.MassSyncPayload;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientWorldEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.entity.state.PlayerEntityRenderState;
 import net.minecraft.client.world.ClientWorld;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
-/**
- * Client bookkeeping for the HUD and the host's model. The disc itself is a
- * server-spawned ItemDisplay. Hiding only affects this frame's render states;
- * entity invisibility remains entirely under the server's control.
- */
+/** HUD state tracking; the server-spawned disc does not hide the player. */
 public final class BlackHoleRenderer {
     private static final long STALE_AFTER_TICKS = 100;
     private static final Map<UUID, Hole> HOLES = new HashMap<>();
@@ -59,17 +51,7 @@ public final class BlackHoleRenderer {
         ClientWorldEvents.AFTER_CLIENT_WORLD_CHANGE.register((client, newWorld) -> useWorld(newWorld));
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> reset());
         ClientTickEvents.END_CLIENT_TICK.register(BlackHoleRenderer::tick);
-        WorldRenderEvents.END_EXTRACTION.register(context -> {
-            useWorld(context.world());
-            Set<Integer> hidden = new HashSet<>();
-            for (var player : context.world().getPlayers()) {
-                if (HOLES.containsKey(player.getUuid())) {
-                    hidden.add(player.getId());
-                }
-            }
-            context.worldState().entityRenderStates.removeIf(state ->
-                    state instanceof PlayerEntityRenderState player && hidden.contains(player.id));
-        });
+
     }
 
     private static void useWorld(ClientWorld newWorld) {

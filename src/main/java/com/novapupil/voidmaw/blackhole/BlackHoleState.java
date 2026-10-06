@@ -12,20 +12,35 @@ public final class BlackHoleState {
     private int level = HoleLevel.MIN;
     /** Mouth plane follows the player's feet, including slabs and stairs. */
     private double mouthY;
-    /** Golden-angle sweep cursor so block sampling covers the disc evenly. */
-    private double sweepAngle;
+    private long blockCursor;
+    private final HoleProgress progress;
     /** The ItemDisplay that draws the hole disc; spawned and moved by the manager. */
     private ItemDisplayEntity discVisual;
     /** Diameter currently applied to the disc, so level-ups animate once. */
     private float discScale = 1.0f;
 
     BlackHoleState() {
+        this(null);
+    }
+
+    BlackHoleState(HoleProgress progress) {
+        this.progress = progress;
+        this.mass = progress == null ? 0.0 : progress.mass();
+        this.level = HoleLevel.levelFor(mass);
         this.ticksLeft = Balance.BASE_DURATION_TICKS;
     }
 
-    double nextSweepAngle() {
-        sweepAngle += 2.399963;
-        return sweepAngle;
+    long nextBlockIndex(long count) {
+        long index = blockCursor % count;
+        blockCursor = (index + 1) % count;
+        return index;
+    }
+
+    void retainProgress() {
+        if (progress != null) {
+            progress.retain(mass);
+            progress.flush();
+        }
     }
 
     public double mouthY() {
@@ -69,9 +84,15 @@ public final class BlackHoleState {
     }
 
     void addMass(double amount) {
-        mass += amount;
-        ticksLeft = (int) Math.min(ticksLeft + Math.round(amount * Balance.TICKS_PER_MASS),
-                Balance.MAX_DURATION_TICKS);
+        if (!Double.isFinite(amount) || amount <= 0) {
+            return;
+        }
+        mass = Math.min(Double.MAX_VALUE, mass + amount);
+        if (progress != null) {
+            progress.retain(mass);
+        }
+        ticksLeft = (int) Math.min(ticksLeft + Math.min(amount * Balance.TICKS_PER_MASS,
+                Balance.MAX_DURATION_TICKS), Balance.MAX_DURATION_TICKS);
     }
 
     void tick() {

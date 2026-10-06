@@ -2,8 +2,8 @@
   "item.voidmaw.singularity_core": "Singularity Core",
   "item.voidmaw.hole_disc": "Void Maw Disc",
   "commands.voidmaw.started": "The ground cracks open beneath you — you are the Void Maw now, and everything above will be dragged into the depths. Right-click again to close it quietly; a special interaction can detonate the energy stored within the black hole!",
-  "commands.voidmaw.stopped": "The maw seals shut, sated for now. Mass devoured: %s",
-  "commands.voidmaw.detonated": "SINGULARITY COLLAPSE! The level %s maw unleashes everything it has consumed — blast power %s!",
+  "commands.voidmaw.stopped": "The maw rests, but its growth remains. Retained mass: %s",
+  "commands.voidmaw.detonated": "Singularity collapse! The level %s maw releases its energy — blast power %s! Your level and mass are retained.",
   "commands.voidmaw.levelup": "The maw grows greedier — now level %s, with a pull radius of %s blocks!",
   "commands.voidmaw.not_active": "The maw lies dormant. Wake it with the Singularity Core.",
   "commands.voidmaw.status_active": "The maw is feeding: level %s · mass %s · radius %s blocks · collapse in %ss",
@@ -16,12 +16,13 @@
   "container.voidmaw.next": "§aNext page ▶",
   "container.voidmaw.sort": "§bSort warehouse",
   "hud.voidmaw.level": "Black Hole Lv.%s · %s/%s",
-  "hud.voidmaw.level_max": "Black Hole Lv.%s · MAX",
   "hud.voidmaw.mass": "Mass %s · Radius %s blocks · %ss to collapse",
   "hud.voidmaw.inactive": "The maw sleeps",
   "hud.voidmaw.edit_title": "Drag the Black Hole HUD",
   "hud.voidmaw.edit_hint": "Drag to move · Scroll to resize · R resets · Esc to finish",
   "key.categories.voidmaw.main": "Void Maw",
   "key.voidmaw.hud_edit": "Edit Black Hole HUD",
-  "key.voidmaw.warehouse": "Open Black Hole Warehouse"
+  "key.voidmaw.warehouse": "Open Black Hole Warehouse",
+  "commands.voidmaw.progress_unavailable": "Your saved growth could not be read. The maw stays closed to protect it; check the server log.",
+  "commands.voidmaw.status_saved": "The maw rests: retained level %s · mass %s. Use the Singularity Core to keep growing."
 }

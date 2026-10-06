@@ -61,7 +61,13 @@ public final class BlackHoleManager {
             player.sendMessage(ALREADY_OPEN, false);
             return;
         }
-        BlackHoleState state = new BlackHoleState();
+        BlackHoleState state;
+        try {
+            state = new BlackHoleState(HoleProgress.get(world(player).getServer(), player.getUuid()));
+        } catch (IllegalStateException failure) {
+            player.sendMessage(Text.translatable("commands.voidmaw.progress_unavailable"), false);
+            return;
+        }
         state.setMouthY(player.getY());
         ACTIVE.put(player.getUuid(), state);
         world(player).playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDER_DRAGON_GROWL,
@@ -79,6 +85,7 @@ public final class BlackHoleManager {
         if (state == null) {
             return;
         }
+        state.retainProgress();
         discardDiscVisual(state);
         ServerWorld world = world(player);
         double mass = state.mass();
@@ -96,7 +103,7 @@ public final class BlackHoleManager {
             world.spawnParticles(ParticleTypes.EXPLOSION_EMITTER,
                     player.getX(), player.getY(), player.getZ(), 1, 0.0, 0.0, 0.0, 0.0);
             player.sendMessage(Text.translatable("commands.voidmaw.detonated",
-                    level, String.format(java.util.Locale.ROOT, "%.0f", power)), false);
+                    level, String.format(java.util.Locale.ROOT, "%.2f", power)), false);
         } else {
             world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT,
                     SoundCategory.PLAYERS, 0.8f, 0.5f);
@@ -116,7 +123,13 @@ public final class BlackHoleManager {
     public static void sendStatus(ServerPlayerEntity player) {
         BlackHoleState state = ACTIVE.get(player.getUuid());
         if (state == null) {
-            player.sendMessage(Text.translatable("commands.voidmaw.status_idle"), false);
+            try {
+                double mass = HoleProgress.get(world(player).getServer(), player.getUuid()).mass();
+                player.sendMessage(Text.translatable("commands.voidmaw.status_saved", HoleLevel.levelFor(mass),
+                        String.format(java.util.Locale.ROOT, "%.1f", mass)), false);
+            } catch (IllegalStateException failure) {
+                player.sendMessage(Text.translatable("commands.voidmaw.progress_unavailable"), false);
+            }
         } else {
             int level = HoleLevel.levelFor(state.mass());
             player.sendMessage(Text.translatable("commands.voidmaw.status_active",
@@ -132,6 +145,7 @@ public final class BlackHoleManager {
         if (state == null) {
             return;
         }
+        state.retainProgress();
         discardDiscVisual(state);
         MassSyncPayload payload = new MassSyncPayload(player.getUuid(), false, 0, 0.0, 0.0, 0.0, 0);
         for (ServerPlayerEntity watcher : PlayerLookup.tracking(player)) {
@@ -162,13 +176,17 @@ public final class BlackHoleManager {
     }
 
     public static void reset() {
-        ACTIVE.values().forEach(BlackHoleManager::discardDiscVisual);
+        ACTIVE.values().forEach(state -> {
+            state.retainProgress();
+            discardDiscVisual(state);
+        });
         ACTIVE.clear();
     }
 
     public static void tick(MinecraftServer server) {
         if (server.getTicks() % 40 == 0) {
             BlackHoleWarehouse.flushAll(server);
+            HoleProgress.flushAll(server);
         }
         if (server.getTicks() % 100 == 0) {
             sweepOrphanVisuals(server);
@@ -205,9 +223,7 @@ public final class BlackHoleManager {
                     entity -> entity.isAlive() && HoleGeometry.contains(entity.getX() - player.getX(),
                             entity.getZ() - player.getZ(), entity.getY(), mouth, radius)
                             && !entity.getBlockState().isIn(MassTables.UNSWALLOWABLE)
-                            && entity.getBlockState().getHardness(world, entity.getBlockPos()) >= 0
-                            && entity.getBlockState().getHardness(world, entity.getBlockPos())
-                                    <= HoleLevel.maxBlockHardnessFor(level));
+                            && entity.getBlockState().getHardness(world, entity.getBlockPos()) >= 0);
             for (FallingBlockEntity fbe : falling) {
                 BlockState blockState = fbe.getBlockState();
                 state.addMass(MassTables.blockMass(blockState, world, fbe.getBlockPos()));
@@ -216,9 +232,7 @@ public final class BlackHoleManager {
                 }
                 fbe.discard();
             }
-            if (world.getTime() % 3 == 0) {
-                devourBlocks(world, player, state, level, radius, mouth);
-            }
+            devourBlocks(world, player, state, radius, mouth);
             if (world.getTime() % 2 == 0) {
                 ambientVortex(world, player, state, radius, mouth);
             }
@@ -247,6 +261,7 @@ public final class BlackHoleManager {
                                          double mouth, double radius) {
         ItemDisplayEntity disc = state.discVisual();
         if (disc != null && disc.getEntityWorld() != world) {
+            state.retainProgress();
             discardDiscVisual(state);
             disc = null;
         }
@@ -377,69 +392,56 @@ public final class BlackHoleManager {
     }
 
     private static void devourBlocks(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
-                                     int level, double radius, double mouth) {
-        int attempts = Balance.blockAttemptsFor(state.mass());
-        // ONLY blocks at or above the mouth plane are devoured - the terrain below
-        // the disc (including right under the player's feet) is never damaged.
-        // Taller structures are chewed bottom-up, level permitting.
-        int bottom = HoleGeometry.firstBlockY(mouth);
-        int top = MathHelper.floor(mouth) + 3 + level * 2;
-
-        // Samples sweep the disc evenly (golden angle) instead of clumping.
-        for (int i = 0; i < attempts; i++) {
-            double angle = state.nextSweepAngle();
-            double dist = Math.sqrt(world.random.nextDouble()) * radius;
-            int x = MathHelper.floor(player.getX() + Math.cos(angle) * dist);
-            int z = MathHelper.floor(player.getZ() + Math.sin(angle) * dist);
-
-            // Blocks whose bases lie below the feet are never removed.
-            for (int y = bottom; y <= top; y++) {
-                BlockPos pos = new BlockPos(x, y, z);
-                if (!world.isChunkLoaded(pos) || !HoleGeometry.contains(x + 0.5 - player.getX(),
-                        z + 0.5 - player.getZ(), y, mouth, radius)) {
-                    continue;
+                                     double radius, double mouth) {
+        int bottom = Math.max(world.getBottomY(), HoleGeometry.firstBlockY(mouth));
+        int top = world.getTopYInclusive();
+        int minX = MathHelper.floor(player.getX() - radius);
+        int minZ = MathHelper.floor(player.getZ() - radius);
+        int width = (int) Math.ceil(radius * 2) + 2;
+        long volume = ColumnSweep.size(width, bottom, top);
+        if (volume == 0) {
+            return;
+        }
+        int consumed = 0;
+        for (int checked = 0; checked < Balance.BLOCK_SCAN_BUDGET && checked < volume; checked++) {
+            var cell = ColumnSweep.cell(state.nextBlockIndex(volume), minX, minZ, width, bottom);
+            BlockPos pos = new BlockPos(cell.x(), cell.y(), cell.z());
+            if (!HoleGeometry.contains(cell.x() + 0.5 - player.getX(), cell.z() + 0.5 - player.getZ(),
+                    cell.y(), mouth, radius) || !world.isChunkLoaded(pos)) {
+                continue;
+            }
+            BlockState blockState = world.getBlockState(pos);
+            if (blockState.isAir() || blockState.isIn(MassTables.UNSWALLOWABLE)
+                    || !blockState.getFluidState().isEmpty() || blockState.getHardness(world, pos) < 0) {
+                continue;
+            }
+            BlockEntity blockEntity = world.getBlockEntity(pos);
+            List<ItemStack> drops = LootHelper.blockLoot(world, blockState, pos, blockEntity);
+            List<ItemStack> contents = new java.util.ArrayList<>();
+            if (blockEntity instanceof Inventory inventory) {
+                for (int slot = 0; slot < inventory.size(); slot++) {
+                    contents.add(inventory.getStack(slot).copy());
                 }
-                BlockState blockState = world.getBlockState(pos);
-                if (blockState.isAir() || blockState.isIn(MassTables.UNSWALLOWABLE)) {
-                    continue;
-                }
-                if (!blockState.getFluidState().isEmpty()) {
-                    continue;
-                }
-                float hardness = blockState.getHardness(world, pos);
-                if (hardness < 0.0f) {
-                    continue;
-                }
-                if (hardness > HoleLevel.maxBlockHardnessFor(level)) {
-                    continue;
-                }
-
-                BlockEntity blockEntity = world.getBlockEntity(pos);
-                List<ItemStack> drops = LootHelper.blockLoot(world, blockState, pos, blockEntity);
-                List<ItemStack> contents = new java.util.ArrayList<>();
+                inventory.clear();
+            }
+            double mass = MassTables.blockMass(blockState, world, pos);
+            if (!world.setBlockState(pos, Blocks.AIR.getDefaultState(), Block.NOTIFY_ALL)) {
                 if (blockEntity instanceof Inventory inventory) {
-                    for (int slot = 0; slot < inventory.size(); slot++) {
-                        contents.add(inventory.getStack(slot).copy());
+                    for (int slot = 0; slot < contents.size(); slot++) {
+                        inventory.setStack(slot, contents.get(slot));
                     }
-                    inventory.clear();
                 }
-                double mass = MassTables.blockMass(blockState, world, pos);
-                if (!world.setBlockState(pos, Blocks.AIR.getDefaultState(), Block.NOTIFY_ALL)) {
-                    if (blockEntity instanceof Inventory inventory) {
-                        for (int slot = 0; slot < contents.size(); slot++) {
-                            inventory.setStack(slot, contents.get(slot));
-                        }
-                    }
-                    continue;
-                }
-                state.addMass(mass);
-                drops.forEach(drop -> insertOrSpill(player, state, drop));
-                // Shulker-box loot already carries its contents as item components.
-                if (!(blockEntity instanceof net.minecraft.block.entity.ShulkerBoxBlockEntity)) {
-                    contents.forEach(drop -> insertOrSpill(player, state, drop));
-                }
-                world.playSound(null, pos, blockState.getSoundGroup().getBreakSound(),
-                        SoundCategory.BLOCKS, 0.4f, 0.7f);
+                continue;
+            }
+            state.addMass(mass);
+            drops.forEach(drop -> insertOrSpill(player, state, drop));
+            // Shulker-box loot already carries its contents as item components.
+            if (!(blockEntity instanceof net.minecraft.block.entity.ShulkerBoxBlockEntity)) {
+                contents.forEach(drop -> insertOrSpill(player, state, drop));
+            }
+            world.playSound(null, pos, blockState.getSoundGroup().getBreakSound(),
+                    SoundCategory.BLOCKS, 0.25f, 0.7f);
+            if (++consumed >= Balance.MAX_BLOCKS_PER_TICK) {
                 break;
             }
         }

@@ -18,7 +18,39 @@ public final class AbsorptionRegressionTest {
         assert HoleLevel.levelFor(100) == 2;
         assert HoleLevel.levelFor(3000) == 5;
         assert HoleLevel.radiusFor(0) == HoleLevel.radiusFor(1);
-        assert HoleLevel.radiusFor(99) == HoleLevel.radiusFor(5);
+        assert HoleLevel.radiusFor(99) > HoleLevel.radiusFor(5);
+        assert HoleLevel.levelFor(5700) == 6;
+        assert HoleLevel.levelFor(HoleLevel.levelThreshold(1000)) == 1000;
+        assert HoleLevel.levelFor(HoleLevel.levelThreshold(1000) - 1) == 999;
+        assert HoleLevel.nextLevelMass(1000) > HoleLevel.levelThreshold(1000);
+        assert HoleLevel.explosionPowerFor(1) == 3.0f;
+        assert HoleLevel.explosionPowerFor(2) == 3.75f;
+        assert Math.abs(HoleLevel.explosionPowerFor(5) - 5.12132f) < 0.001f;
+        assert Math.abs(HoleLevel.explosionPowerFor(10) - 6.89711f) < 0.001f;
+        assert HoleLevel.explosionPowerFor(100) - HoleLevel.explosionPowerFor(99)
+                < HoleLevel.explosionPowerFor(2) - HoleLevel.explosionPowerFor(1);
+        assert Double.isFinite(HoleLevel.radiusFor(Integer.MAX_VALUE));
+        assert ColumnSweep.size(5, 64, 319) == 6400;
+        assert ColumnSweep.cell(6399, 0, 0, 5, 64).equals(new ColumnSweep.Cell(4, 319, 4));
+        try {
+            var file = java.nio.file.Files.createTempDirectory("voidmaw-progress-test-").resolve("test.json");
+            var growth = new HoleProgress(file);
+            var firstForm = new BlackHoleState(growth);
+            firstForm.addMass(5700);
+            firstForm.retainProgress();
+            var nextForm = new BlackHoleState(growth);
+            assert nextForm.mass() == 5700;
+            assert nextForm.level() == 6;
+            assert nextForm.ticksLeft() == Balance.BASE_DURATION_TICKS;
+            var reload = new HoleProgress(file);
+            assert reload.mass() == 5700;
+            reload.retain(1);
+            assert reload.mass() == 5700;
+            java.nio.file.Files.delete(file);
+            java.nio.file.Files.delete(file.getParent());
+        } catch (java.io.IOException failure) {
+            throw new AssertionError(failure);
+        }
         var state = new BlackHoleState();
         state.tick();
         assert state.ticksLeft() == 1199;
@@ -30,6 +62,10 @@ public final class AbsorptionRegressionTest {
             MassSyncPayload.CODEC.encode(buffer, payload);
             assert payload.equals(MassSyncPayload.CODEC.decode(buffer));
             assert !buffer.isReadable();
+            var large = new MassSyncPayload(UUID.randomUUID(), true, 1000, 900_000_000.125,
+                    HoleLevel.radiusFor(1000), -63.5, 6000);
+            MassSyncPayload.CODEC.encode(buffer, large);
+            assert large.equals(MassSyncPayload.CODEC.decode(buffer));
             MassSyncPayload.LEGACY_CODEC.encode(buffer, payload);
             assert MassSyncPayload.LEGACY_CODEC.decode(buffer).ticksLeft() == MassSyncPayload.UNKNOWN_TICKS;
             MassSyncPayload.LEGACY_CODEC.encode(buffer, payload);

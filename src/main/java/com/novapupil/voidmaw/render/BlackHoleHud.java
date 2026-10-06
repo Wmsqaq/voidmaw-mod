@@ -65,14 +65,11 @@ public final class BlackHoleHud implements HudElement {
 
         TextRenderer textRenderer = client.textRenderer;
         boolean active = hole != null;
-        boolean maxed = active && hole.level() >= HoleLevel.MAX;
         double next = active ? HoleLevel.nextLevelMass(hole.level()) : 0;
 
         Text levelLine = !active
                 ? Text.translatable("hud.voidmaw.inactive")
-                : maxed
-                        ? Text.translatable("hud.voidmaw.level_max", hole.level())
-                        : Text.translatable("hud.voidmaw.level",
+                : Text.translatable("hud.voidmaw.level",
                                 hole.level(),
                                 String.format(Locale.ROOT, "%.0f", hole.mass()),
                                 String.format(Locale.ROOT, "%.0f", next));
@@ -110,7 +107,7 @@ public final class BlackHoleHud implements HudElement {
         context.drawText(textRenderer, levelLine, PADDING, PADDING, COLOR_LEVEL, true);
 
         int barY = PADDING + lineHeight + 2;
-        if (active && !maxed) {
+        if (active) {
             double base = HoleLevel.levelThreshold(hole.level());
             double progress = MathHelper.clamp((hole.mass() - base) / (next - base), 0.0, 1.0);
             context.fill(PADDING, barY, PADDING + BAR_WIDTH, barY + BAR_HEIGHT, COLOR_BAR_BG);

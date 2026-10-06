@@ -28,6 +28,8 @@ public class VoidMawClient implements ClientModInitializer {
         // state updates past a disconnect or world change.
         ClientPlayNetworking.registerGlobalReceiver(MassSyncPayload.ID, (payload, context) ->
                 BlackHoleRenderer.updateState(payload));
+        ClientPlayNetworking.registerGlobalReceiver(MassSyncPayload.V2_ID, (payload, context) ->
+                BlackHoleRenderer.updateState(payload));
         ClientPlayNetworking.registerGlobalReceiver(MassSyncPayload.LEGACY_ID, (payload, context) ->
                 BlackHoleRenderer.updateState(payload));
 

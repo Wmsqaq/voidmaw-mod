@@ -28,6 +28,7 @@ public class VoidMaw implements ModInitializer {
     public void onInitialize() {
         ModItems.register();
         PayloadTypeRegistry.playS2C().register(MassSyncPayload.ID, MassSyncPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(MassSyncPayload.V2_ID, MassSyncPayload.LEGACY_CODEC);
         PayloadTypeRegistry.playS2C().register(MassSyncPayload.LEGACY_ID, MassSyncPayload.LEGACY_CODEC);
         PayloadTypeRegistry.playC2S().register(OpenWarehousePayload.ID, OpenWarehousePayload.CODEC);
         // The typed receiver already runs on the server thread. Handle it before
@@ -35,10 +36,14 @@ public class VoidMaw implements ModInitializer {
         ServerPlayNetworking.registerGlobalReceiver(OpenWarehousePayload.ID, (payload, context) ->
                 WarehouseUi.open(context.player()));
         ServerTickEvents.END_SERVER_TICK.register(BlackHoleManager::tick);
-        ServerLifecycleEvents.SERVER_STOPPING.register(BlackHoleWarehouse::flushAll);
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            BlackHoleWarehouse.flushAll(server);
+            com.novapupil.voidmaw.blackhole.HoleProgress.flushAll(server);
+        });
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
             BlackHoleManager.reset();
             BlackHoleWarehouse.unload(server);
+            com.novapupil.voidmaw.blackhole.HoleProgress.unload(server);
         });
         // One Singularity Core per player, on their first join into this world;
         // plus the hardcoded join copyright broadcast for every join.
