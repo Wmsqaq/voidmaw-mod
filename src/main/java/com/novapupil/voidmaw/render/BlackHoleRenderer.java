@@ -1,14 +1,18 @@
 package com.novapupil.voidmaw.render;
 
+import com.novapupil.voidmaw.VoidMaw;
 import com.novapupil.voidmaw.net.MassSyncPayload;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.render.LightmapTextureManager;
+import net.minecraft.client.render.OverlayTexture;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.Entity;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
 
@@ -18,14 +22,18 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Client side of the maw: draws a FLAT black disc lying on the ground at the pit
- * mouth (Hole.io look) - the actual pit is carved by the server. Also hides the
- * host's model and keeps per-player hole state fresh from server syncs.
+ * Client side of the maw: draws a FLAT hole decal lying on the ground at the pit
+ * mouth. The decal is a textured entity-translucent quad - entity layers render fine
+ * under Iris/Sodium, while vanilla debug render layers (the previous approach) get
+ * dropped by shader pipelines. The host's model is hidden and per-player hole state
+ * is kept fresh from server syncs.
  */
 public final class BlackHoleRenderer {
     /** Hole states stop being drawn if the server stays silent for this long. */
     private static final long STALE_AFTER_MS = 5000;
+    private static final Identifier DISC_TEXTURE = Identifier.of(VoidMaw.MOD_ID, "textures/hole_disc.png");
     private static final Map<UUID, Hole> HOLES = new HashMap<>();
+    private static final Map<UUID, Display> DISPLAYS = new HashMap<>();
 
     public record Hole(int level, double mass, double radius, double mouthY, long updatedAt) {
     }
@@ -50,7 +58,8 @@ public final class BlackHoleRenderer {
         }
     }
 
-    private static final Map<UUID, Display> DISPLAYS = new HashMap<>();
+    private BlackHoleRenderer() {
+    }
 
     public static void updateState(MassSyncPayload payload) {
         if (payload.active()) {
@@ -82,6 +91,7 @@ public final class BlackHoleRenderer {
     private static void tick(MinecraftClient client) {
         if (client.world == null) {
             HOLES.clear();
+            DISPLAYS.clear();
             return;
         }
         long now = System.currentTimeMillis();
@@ -117,7 +127,7 @@ public final class BlackHoleRenderer {
         matrices.translate(-camera.x, -camera.y, -camera.z);
         Matrix4f matrix = matrices.peek().getPositionMatrix();
 
-        VertexConsumer consumer = consumers.getBuffer(RenderLayer.getDebugTriangleFan());
+        VertexConsumer consumer = consumers.getBuffer(RenderLayer.getEntityTranslucent(DISC_TEXTURE));
         long now = System.currentTimeMillis();
         for (Map.Entry<UUID, Hole> entry : HOLES.entrySet()) {
             Entity entity = client.world.getEntity(entry.getKey());
@@ -128,34 +138,48 @@ public final class BlackHoleRenderer {
             Display display = DISPLAYS.computeIfAbsent(entry.getKey(),
                     k -> new Display(hole.mouthY(), hole.radius()));
             display.approach(hole.mouthY(), hole.radius());
-            double radius = display.radius * (1.0 + 0.02 * Math.sin(now / 300.0));
-            // Flat hole lying on the ground: a dark violet under-layer forms the rim,
-            // the near-black core sits a hair above it. Both float just ABOVE the
-            // mouth plane so the disc is visible as a decal on intact terrain.
-            Vec3d rim = new Vec3d(entity.getX(), display.mouthY + 0.01, entity.getZ());
-            Vec3d core = new Vec3d(entity.getX(), display.mouthY + 0.03, entity.getZ());
-            emitDisc(consumer, matrix, rim, radius * 1.10, true, 58, 16, 92);
-            emitDisc(consumer, matrix, rim, radius * 1.10, false, 58, 16, 92);
-            emitDisc(consumer, matrix, core, radius, true, 4, 2, 8);
-            emitDisc(consumer, matrix, core, radius, false, 4, 2, 8);
+
+            // The texture's radial gradient makes the visible hole; the quad is a bit
+            // larger than the pull radius and gently breathes.
+            double radius = display.radius * 1.15 * (1.0 + 0.02 * Math.sin(now / 300.0));
+            float y = (float) (display.mouthY + 0.03);
+            float x1 = (float) (entity.getX() - radius);
+            float x2 = (float) (entity.getX() + radius);
+            float z1 = (float) (entity.getZ() - radius);
+            float z2 = (float) (entity.getZ() + radius);
+            emitQuad(consumer, matrix, x1, z1, x2, z2, y, true);
+            emitQuad(consumer, matrix, x1, z1, x2, z2, y, false);
         }
 
         matrices.pop();
         consumers.drawCurrentLayer();
     }
 
-    /** Emits one flat disc as a triangle fan (center + ring); pass both windings. */
-    private static void emitDisc(VertexConsumer consumer, Matrix4f matrix, Vec3d center,
-                                 double radius, boolean reverse, int r, int g, int b) {
-        consumer.vertex(matrix, (float) center.x, (float) center.y, (float) center.z).color(r, g, b, 255);
-        int segments = Math.max(12, (int) (radius * 6));
-        for (int i = 0; i <= segments; i++) {
-            int index = reverse ? segments - i : i;
-            double phi = Math.PI * 2.0 * index / segments;
-            consumer.vertex(matrix,
-                    (float) (center.x + radius * Math.cos(phi)),
-                    (float) center.y,
-                    (float) (center.z + radius * Math.sin(phi))).color(r, g, b, 255);
+    /** One horizontal quad; the second (reversed) pass keeps it visible from below. */
+    private static void emitQuad(VertexConsumer consumer, Matrix4f matrix,
+                                 float x1, float z1, float x2, float z2, float y, boolean top) {
+        int light = LightmapTextureManager.MAX_LIGHT_COORDINATE;
+        if (top) {
+            vertex(consumer, matrix, x1, y, z1, 0f, 0f, light, 0f, 1f, 0f);
+            vertex(consumer, matrix, x1, y, z2, 0f, 1f, light, 0f, 1f, 0f);
+            vertex(consumer, matrix, x2, y, z2, 1f, 1f, light, 0f, 1f, 0f);
+            vertex(consumer, matrix, x2, y, z1, 1f, 0f, light, 0f, 1f, 0f);
+        } else {
+            vertex(consumer, matrix, x1, y, z1, 0f, 0f, light, 0f, -1f, 0f);
+            vertex(consumer, matrix, x2, y, z1, 1f, 0f, light, 0f, -1f, 0f);
+            vertex(consumer, matrix, x2, y, z2, 1f, 1f, light, 0f, -1f, 0f);
+            vertex(consumer, matrix, x1, y, z2, 0f, 1f, light, 0f, -1f, 0f);
         }
+    }
+
+    private static void vertex(VertexConsumer consumer, Matrix4f matrix,
+                               float x, float y, float z, float u, float v, int light,
+                               float nx, float ny, float nz) {
+        consumer.vertex(matrix, x, y, z)
+                .color(255, 255, 255, 255)
+                .texture(u, v)
+                .overlay(OverlayTexture.DEFAULT_UV)
+                .light(light)
+                .normal(nx, ny, nz);
     }
 }

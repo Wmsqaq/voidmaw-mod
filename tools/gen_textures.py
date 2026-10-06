@@ -15,6 +15,7 @@ import zlib
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ITEM_OUT = os.path.join(ROOT, "src/main/resources/assets/voidmaw/textures/item/singularity_core.png")
 ICON_OUT = os.path.join(ROOT, "src/main/resources/assets/voidmaw/icon.png")
+DISC_OUT = os.path.join(ROOT, "src/main/resources/assets/voidmaw/textures/hole_disc.png")
 
 
 def write_png(path, width, height, rows):
@@ -109,6 +110,32 @@ def icon_texture():
     write_png(ICON_OUT, size, size, rows)
 
 
+def disc_texture():
+    """Flat hole decal: near-black event horizon, violet rim, soft alpha falloff."""
+    size = 256
+    cx = cy = size / 2
+    rows = []
+    for y in range(size):
+        row = []
+        for x in range(size):
+            d = math.hypot(x - cx, y - cy) / (size / 2)
+            if d < 0.55:
+                sheen = 12 * math.sin(x * 0.15 + y * 0.11)
+                row.append((clamp(5 + sheen * 0.3), clamp(3 + sheen * 0.2), clamp(12 + sheen), 255))
+            elif d < 0.82:
+                t = (d - 0.55) / 0.27
+                arc = 0.6 + 0.4 * math.sin(math.atan2(y - cy, x - cx) * 2.0)
+                row.append((clamp(150 * arc), clamp(70 * arc), clamp(220 * arc), clamp(235 * (1 - t * 0.75))))
+            elif d < 0.97:
+                t = (d - 0.82) / 0.15
+                row.append((clamp(140 * (1 - t)), clamp(60 * (1 - t)), clamp(210 * (1 - t)), clamp(60 * (1 - t))))
+            else:
+                row.append((0, 0, 0, 0))
+        rows.append(row)
+    write_png(DISC_OUT, size, size, rows)
+
+
 if __name__ == "__main__":
     item_texture()
     icon_texture()
+    disc_texture()
