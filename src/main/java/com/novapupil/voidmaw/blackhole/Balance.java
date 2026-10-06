@@ -19,9 +19,11 @@ public final class Balance {
     /** Anything whose distance squared to the core is below this gets swallowed. */
     public static final double DEVOUR_DISTANCE_SQ = 1.4 * 1.4;
 
-    /** Work budgets keep full-height absorption from blocking the server tick. */
-    public static final int BLOCK_SCAN_BUDGET = 4096;
-    public static final int MAX_BLOCKS_PER_TICK = 8;
+    /** Work budgets keep full-height absorption from blocking the server tick.
+     * The scan budget counts cells inside non-empty sections only, so it is spent
+     * on real geometry instead of sky and air. */
+    public static final int BLOCK_SCAN_BUDGET = 16384;
+    public static final int MAX_BLOCKS_PER_TICK = 16;
 
     /** Hand every player one Singularity Core the first time they enter the world. */
     public static final boolean GIVE_CORE_ON_FIRST_JOIN = true;

@@ -3,6 +3,7 @@ package com.novapupil.voidmaw.blackhole;
 import com.novapupil.voidmaw.VoidMaw;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.ExperienceOrbEntity;
 import net.minecraft.entity.ItemEntity;
@@ -51,5 +52,10 @@ public final class MassTables {
             return 0.2;
         }
         return 0.3 + hardness * 0.15;
+    }
+
+    /** Fluids have hardness 100, which would dwarf every real block - price them directly. */
+    public static double liquidMass(BlockState state) {
+        return state.isOf(Blocks.LAVA) ? 1.2 : 0.3;
     }
 }

@@ -30,8 +30,24 @@ public final class AbsorptionRegressionTest {
         assert HoleLevel.explosionPowerFor(100) - HoleLevel.explosionPowerFor(99)
                 < HoleLevel.explosionPowerFor(2) - HoleLevel.explosionPowerFor(1);
         assert Double.isFinite(HoleLevel.radiusFor(Integer.MAX_VALUE));
-        assert ColumnSweep.size(5, 64, 319) == 6400;
-        assert ColumnSweep.cell(6399, 0, 0, 5, 64).equals(new ColumnSweep.Cell(4, 319, 4));
+        assert DiscSweep.minChunk(8.0, 2.5) == 0 && DiscSweep.maxChunk(8.0, 2.5) == 0;
+        assert DiscSweep.minChunk(0.0, 2.5) == -1 && DiscSweep.maxChunk(0.0, 2.5) == 0
+                : "a disc over a chunk border spans two chunks";
+        assert DiscSweep.volume(-1, 0, -1, 0) == 4;
+        assert DiscSweep.chunkX(3, -1, 2) == 0 && DiscSweep.chunkZ(3, -1, 2) == 0;
+        assert DiscSweep.chunkX(0, -1, 2) == -1 && DiscSweep.chunkZ(0, -1, 2) == -1;
+        DiscSweep.Row center = DiscSweep.rowRange(0, 8, 8.0, 8.0, 2.5);
+        assert !center.empty() && center.start() <= 6 && center.endInclusive() >= 9
+                : "the column through the center must cover the circle";
+        DiscSweep.Row outside = DiscSweep.rowRange(0, 0, 8.0, 8.0, 2.5);
+        assert outside.empty() : "columns beyond the radius must be skipped";
+        DiscSweep.Row rim = DiscSweep.rowRange(0, 6, 8.0, 8.0, 2.5);
+        assert !rim.empty() : "the rim column at the radius edge is still inside";
+        assert MassTables.liquidMass(net.minecraft.block.Blocks.WATER.getDefaultState()) == 0.3;
+        assert MassTables.liquidMass(net.minecraft.block.Blocks.LAVA.getDefaultState()) == 1.2;
+        assert MassTables.liquidMass(net.minecraft.block.Blocks.LAVA.getDefaultState())
+                > MassTables.liquidMass(net.minecraft.block.Blocks.WATER.getDefaultState())
+                : "lava must outweigh water";
         try {
             var file = java.nio.file.Files.createTempDirectory("voidmaw-progress-test-").resolve("test.json");
             var growth = new HoleProgress(file);

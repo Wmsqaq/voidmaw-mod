@@ -30,7 +30,7 @@ public final class BlackHoleState {
         this.ticksLeft = Balance.BASE_DURATION_TICKS;
     }
 
-    long nextBlockIndex(long count) {
+    long nextSweepIndex(long count) {
         long index = blockCursor % count;
         blockCursor = (index + 1) % count;
         return index;

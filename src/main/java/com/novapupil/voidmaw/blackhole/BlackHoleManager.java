@@ -35,6 +35,9 @@ import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
+import net.minecraft.world.chunk.Chunk;
+import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.world.chunk.ChunkStatus;
 import org.joml.Vector3f;
 
 import java.util.HashMap;
@@ -391,60 +394,131 @@ public final class BlackHoleManager {
         entity.discard();
     }
 
+    /**
+     * Devours blocks by walking chunk sections directly through the chunk palette:
+     * empty sections cost a single isEmpty() call, rows outside the disc are cut by
+     * geometry, and only real cells count against the scan budget - the same coverage
+     * in a fraction of the lookups the old per-position world scan needed. Sections
+     * run bottom-up so the disc eats the layer nearest to it first.
+     */
     private static void devourBlocks(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
                                      double radius, double mouth) {
+        double centerX = player.getX();
+        double centerZ = player.getZ();
         int bottom = Math.max(world.getBottomY(), HoleGeometry.firstBlockY(mouth));
         int top = world.getTopYInclusive();
-        int minX = MathHelper.floor(player.getX() - radius);
-        int minZ = MathHelper.floor(player.getZ() - radius);
-        int width = (int) Math.ceil(radius * 2) + 2;
-        long volume = ColumnSweep.size(width, bottom, top);
-        if (volume == 0) {
+        int minCx = DiscSweep.minChunk(centerX, radius);
+        int maxCx = DiscSweep.maxChunk(centerX, radius);
+        int minCz = DiscSweep.minChunk(centerZ, radius);
+        int maxCz = DiscSweep.maxChunk(centerZ, radius);
+        int zSpan = maxCz - minCz + 1;
+        long chunkVolume = DiscSweep.volume(minCx, maxCx, minCz, maxCz);
+        if (chunkVolume == 0) {
             return;
         }
+        int baseSection = world.getBottomY() >> 4;
+        int bottomSection = Math.max(0, (bottom >> 4) - baseSection);
         int consumed = 0;
-        for (int checked = 0; checked < Balance.BLOCK_SCAN_BUDGET && checked < volume; checked++) {
-            var cell = ColumnSweep.cell(state.nextBlockIndex(volume), minX, minZ, width, bottom);
-            BlockPos pos = new BlockPos(cell.x(), cell.y(), cell.z());
-            if (!HoleGeometry.contains(cell.x() + 0.5 - player.getX(), cell.z() + 0.5 - player.getZ(),
-                    cell.y(), mouth, radius) || !world.isChunkLoaded(pos)) {
+        int checked = 0;
+
+        sweep:
+        for (int visited = 0; visited < chunkVolume; visited++) {
+            long index = state.nextSweepIndex(chunkVolume);
+            int cx = DiscSweep.chunkX(index, minCx, zSpan);
+            int cz = DiscSweep.chunkZ(index, minCz, zSpan);
+            // create=false: never force a chunk into memory for the maw.
+            Chunk chunk = world.getChunk(cx, cz, ChunkStatus.FULL, false);
+            if (chunk == null) {
                 continue;
             }
-            BlockState blockState = world.getBlockState(pos);
-            if (blockState.isAir() || blockState.isIn(MassTables.UNSWALLOWABLE)
-                    || !blockState.getFluidState().isEmpty() || blockState.getHardness(world, pos) < 0) {
+            ChunkSection[] sections = chunk.getSectionArray();
+            int highest = chunk.getHighestNonEmptySection();
+            if (highest < bottomSection) {
                 continue;
             }
-            BlockEntity blockEntity = world.getBlockEntity(pos);
-            List<ItemStack> drops = LootHelper.blockLoot(world, blockState, pos, blockEntity);
-            List<ItemStack> contents = new java.util.ArrayList<>();
-            if (blockEntity instanceof Inventory inventory) {
-                for (int slot = 0; slot < inventory.size(); slot++) {
-                    contents.add(inventory.getStack(slot).copy());
+            int topSection = Math.min(highest, Math.min(sections.length - 1, (top >> 4) - baseSection));
+            DiscSweep.Row[] rows = new DiscSweep.Row[16];
+            for (int lx = 0; lx < 16; lx++) {
+                rows[lx] = DiscSweep.rowRange(cx, lx, centerX, centerZ, radius);
+            }
+            for (int s = bottomSection; s <= topSection; s++) {
+                ChunkSection section = sections[s];
+                if (section == null || section.isEmpty()) {
+                    continue;
                 }
-                inventory.clear();
-            }
-            double mass = MassTables.blockMass(blockState, world, pos);
-            if (!world.setBlockState(pos, Blocks.AIR.getDefaultState(), Block.NOTIFY_ALL)) {
-                if (blockEntity instanceof Inventory inventory) {
-                    for (int slot = 0; slot < contents.size(); slot++) {
-                        inventory.setStack(slot, contents.get(slot));
+                int sectionBaseY = (baseSection + s) << 4;
+                for (int ly = 0; ly < 16; ly++) {
+                    int y = sectionBaseY + ly;
+                    if (y < bottom || y > top) {
+                        continue;
+                    }
+                    for (int lx = 0; lx < 16; lx++) {
+                        DiscSweep.Row row = rows[lx];
+                        if (row.empty()) {
+                            continue;
+                        }
+                        int x = (cx << 4) + lx;
+                        for (int lz = row.start(); lz <= row.endInclusive(); lz++) {
+                            if (++checked > Balance.BLOCK_SCAN_BUDGET || consumed >= Balance.MAX_BLOCKS_PER_TICK) {
+                                break sweep;
+                            }
+                            BlockState blockState = section.getBlockState(lx, ly, lz);
+                            if (blockState.isAir() || blockState.isIn(MassTables.UNSWALLOWABLE)) {
+                                continue;
+                            }
+                            BlockPos pos = new BlockPos(x, y, (cz << 4) + lz);
+                            if (blockState.getHardness(world, pos) < 0) {
+                                continue;
+                            }
+                            if (absorbBlock(world, player, state, blockState, pos)) {
+                                consumed++;
+                            }
+                        }
                     }
                 }
-                continue;
-            }
-            state.addMass(mass);
-            drops.forEach(drop -> insertOrSpill(player, state, drop));
-            // Shulker-box loot already carries its contents as item components.
-            if (!(blockEntity instanceof net.minecraft.block.entity.ShulkerBoxBlockEntity)) {
-                contents.forEach(drop -> insertOrSpill(player, state, drop));
-            }
-            world.playSound(null, pos, blockState.getSoundGroup().getBreakSound(),
-                    SoundCategory.BLOCKS, 0.25f, 0.7f);
-            if (++consumed >= Balance.MAX_BLOCKS_PER_TICK) {
-                break;
             }
         }
+    }
+
+    /** Removes one block (or fluid column), banking its loot and mass; false if the world refused. */
+    private static boolean absorbBlock(ServerWorld world, ServerPlayerEntity player, BlackHoleState state,
+                                       BlockState blockState, BlockPos pos) {
+        // Pure water/lava columns have no loot, no container and no break sound;
+        // waterlogged solids keep their normal block treatment.
+        boolean liquid = blockState.getBlock() instanceof net.minecraft.block.FluidBlock;
+        BlockEntity blockEntity = liquid ? null : world.getBlockEntity(pos);
+        List<ItemStack> drops = liquid
+                ? List.of()
+                : LootHelper.blockLoot(world, blockState, pos, blockEntity);
+        List<ItemStack> contents = new java.util.ArrayList<>();
+        if (!liquid && blockEntity instanceof Inventory inventory) {
+            for (int slot = 0; slot < inventory.size(); slot++) {
+                contents.add(inventory.getStack(slot).copy());
+            }
+            inventory.clear();
+        }
+        double mass = liquid
+                ? MassTables.liquidMass(blockState)
+                : MassTables.blockMass(blockState, world, pos);
+        if (!world.setBlockState(pos, Blocks.AIR.getDefaultState(), Block.NOTIFY_ALL)) {
+            if (blockEntity instanceof Inventory inventory) {
+                for (int slot = 0; slot < contents.size(); slot++) {
+                    inventory.setStack(slot, contents.get(slot));
+                }
+            }
+            return false;
+        }
+        state.addMass(mass);
+        drops.forEach(drop -> insertOrSpill(player, state, drop));
+        // Shulker-box loot already carries its contents as item components.
+        if (!liquid && !(blockEntity instanceof net.minecraft.block.entity.ShulkerBoxBlockEntity)) {
+            contents.forEach(drop -> insertOrSpill(player, state, drop));
+        }
+        if (!liquid) {
+            world.playSound(null, pos, blockState.getSoundGroup().getBreakSound(),
+                    SoundCategory.BLOCKS, 0.25f, 0.7f);
+        }
+        return true;
     }
 
     /** Puts a stack into the owner's warehouse; overflow is converted into mass. */
