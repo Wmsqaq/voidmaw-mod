@@ -34,6 +34,7 @@ public final class BlackHoleRenderer {
     private static final Identifier DISC_TEXTURE = Identifier.of(VoidMaw.MOD_ID, "textures/hole_disc.png");
     private static final Map<UUID, Hole> HOLES = new HashMap<>();
     private static final Map<UUID, Display> DISPLAYS = new HashMap<>();
+    private static boolean WARNED_NO_CONSUMERS;
 
     public record Hole(int level, double mass, double radius, double mouthY, long updatedAt) {
     }
@@ -83,7 +84,10 @@ public final class BlackHoleRenderer {
     }
 
     public static void init() {
-        WorldRenderEvents.END_MAIN.register(BlackHoleRenderer::render);
+        // AFTER_ENTITIES: the entity vertex batch is flushed right after this event,
+        // so the decal works with ANY consumer provider (vanilla, Sodium, Iris) -
+        // unlike END_MAIN where consumers() may not be a flushable Immediate.
+        WorldRenderEvents.AFTER_ENTITIES.register(BlackHoleRenderer::render);
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK
                 .register(BlackHoleRenderer::tick);
     }
@@ -115,7 +119,13 @@ public final class BlackHoleRenderer {
         if (client.world == null || HOLES.isEmpty()) {
             return;
         }
-        if (!(context.consumers() instanceof VertexConsumerProvider.Immediate consumers)) {
+        VertexConsumerProvider consumers = context.consumers();
+        if (consumers == null) {
+            if (!WARNED_NO_CONSUMERS) {
+                WARNED_NO_CONSUMERS = true;
+                com.novapupil.voidmaw.VoidMaw.LOGGER.warn(
+                        "[voidmaw] WorldRenderContext.consumers() is null - the hole decal cannot render here");
+            }
             return;
         }
         MatrixStack matrices = context.matrices();
@@ -152,7 +162,11 @@ public final class BlackHoleRenderer {
         }
 
         matrices.pop();
-        consumers.drawCurrentLayer();
+        // With the vanilla immediate we flush right away; other providers (Sodium)
+        // flush their entity batch right after this event, covering the decal too.
+        if (consumers instanceof VertexConsumerProvider.Immediate immediate) {
+            immediate.drawCurrentLayer();
+        }
     }
 
     /** One horizontal quad; the second (reversed) pass keeps it visible from below. */
