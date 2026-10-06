@@ -2,14 +2,10 @@ package com.novapupil.voidmaw.command;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.novapupil.voidmaw.blackhole.BlackHoleManager;
-import com.novapupil.voidmaw.warehouse.BlackHoleWarehouse;
-import com.novapupil.voidmaw.warehouse.WarehouseScreenHandler;
-import net.minecraft.screen.SimpleNamedScreenHandlerFactory;
+import com.novapupil.voidmaw.warehouse.WarehouseUi;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
 
 public final class VoidMawCommand {
     private VoidMawCommand() {
@@ -46,10 +42,6 @@ public final class VoidMawCommand {
     }
 
     private static void openWarehouse(ServerPlayerEntity player) {
-        BlackHoleWarehouse warehouse = BlackHoleWarehouse.get(
-                ((ServerWorld) player.getEntityWorld()).getServer(), player.getUuid());
-        player.openHandledScreen(new SimpleNamedScreenHandlerFactory(
-                (syncId, inventory, p) -> new WarehouseScreenHandler(syncId, inventory, warehouse),
-                Text.translatable("container.voidmaw.warehouse")));
+        WarehouseUi.open(player);
     }
 }

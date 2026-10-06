@@ -9,6 +9,7 @@ import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import com.novapupil.voidmaw.VoidMaw;
 import net.minecraft.item.ItemStack;
+import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryOps;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.WorldSavePath;
@@ -101,6 +102,56 @@ public final class BlackHoleWarehouse {
             }
         }
         return remainder;
+    }
+
+    /** Consolidates and sorts every page: merge stacks, order by item id, compact. */
+    public void sortAll() {
+        List<ItemStack> all = new ArrayList<>();
+        for (net.minecraft.util.collection.DefaultedList<ItemStack> page : pages) {
+            for (int i = 0; i < RESERVED_START; i++) {
+                if (!page.get(i).isEmpty()) {
+                    all.add(page.get(i));
+                }
+                page.set(i, ItemStack.EMPTY);
+            }
+        }
+
+        List<ItemStack> merged = new ArrayList<>();
+        for (ItemStack stack : all) {
+            for (ItemStack target : merged) {
+                if (stack.isEmpty()) {
+                    break;
+                }
+                if (ItemStack.areItemsAndComponentsEqual(target, stack)) {
+                    int room = target.getMaxCount() - target.getCount();
+                    int moved = Math.min(room, stack.getCount());
+                    target.increment(moved);
+                    stack.decrement(moved);
+                }
+            }
+            if (!stack.isEmpty()) {
+                merged.add(stack);
+            }
+        }
+        merged.sort((a, b) -> {
+            int c = Registries.ITEM.getId(a.getItem()).toString()
+                    .compareTo(Registries.ITEM.getId(b.getItem()).toString());
+            return c != 0 ? c : Integer.compare(b.getCount(), a.getCount());
+        });
+
+        int page = 0;
+        int slot = 0;
+        for (ItemStack stack : merged) {
+            if (page >= PAGES) {
+                break;
+            }
+            pages.get(page).set(slot, stack);
+            if (++slot >= RESERVED_START) {
+                slot = 0;
+                page++;
+            }
+        }
+        markDirty();
     }
 
     public void markDirty() {

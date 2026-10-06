@@ -24,6 +24,7 @@ import net.minecraft.util.collection.DefaultedList;
 public class WarehouseScreenHandler extends GenericContainerScreenHandler {
     public static final int RESERVED_START = BlackHoleWarehouse.RESERVED_START;
     public static final int PREV_SLOT = 45;
+    public static final int SORT_SLOT = 47;
     public static final int NEXT_SLOT = 53;
     public static final int INFO_SLOT = 49;
 
@@ -63,6 +64,12 @@ public class WarehouseScreenHandler extends GenericContainerScreenHandler {
             switchPage(1);
             return;
         }
+        if (actionType == SlotActionType.PICKUP && slotIndex == SORT_SLOT) {
+            warehouse.sortAll();
+            decorate();
+            this.sendContentUpdates();
+            return;
+        }
         if (slotIndex >= RESERVED_START) {
             return;
         }
@@ -91,9 +98,10 @@ public class WarehouseScreenHandler extends GenericContainerScreenHandler {
         view.set(NEXT_SLOT, page < warehouse.pageCount() - 1
                 ? named(Items.SPECTRAL_ARROW, Text.translatable("container.voidmaw.next"))
                 : ItemStack.EMPTY);
+        view.set(SORT_SLOT, named(Items.CHEST, Text.translatable("container.voidmaw.sort")));
         ItemStack filler = named(Items.GRAY_STAINED_GLASS_PANE, Text.literal(" "));
         for (int i = RESERVED_START; i < BlackHoleWarehouse.SIZE; i++) {
-            if (i != PREV_SLOT && i != INFO_SLOT && i != NEXT_SLOT) {
+            if (i != PREV_SLOT && i != INFO_SLOT && i != NEXT_SLOT && i != SORT_SLOT) {
                 view.set(i, filler.copy());
             }
         }

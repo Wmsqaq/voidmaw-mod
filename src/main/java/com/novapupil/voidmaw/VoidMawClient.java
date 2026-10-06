@@ -1,6 +1,7 @@
 package com.novapupil.voidmaw;
 
 import com.novapupil.voidmaw.net.MassSyncPayload;
+import com.novapupil.voidmaw.net.OpenWarehousePayload;
 import com.novapupil.voidmaw.render.BlackHoleHud;
 import com.novapupil.voidmaw.render.BlackHoleRenderer;
 import com.novapupil.voidmaw.render.HudEditScreen;
@@ -30,10 +31,18 @@ public class VoidMawClient implements ClientModInitializer {
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_H,
                 KeyBinding.Category.create(Identifier.of(VoidMaw.MOD_ID, "main"))));
+        KeyBinding warehouseKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.voidmaw.warehouse",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_G,
+                KeyBinding.Category.create(Identifier.of(VoidMaw.MOD_ID, "main"))));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (hudEditKey.wasPressed()) {
                 client.setScreen(new HudEditScreen(client.currentScreen));
+            }
+            while (warehouseKey.wasPressed()) {
+                ClientPlayNetworking.send(OpenWarehousePayload.INSTANCE);
             }
         });
     }
