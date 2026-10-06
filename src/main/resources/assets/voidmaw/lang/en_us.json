@@ -16,6 +16,7 @@
   "container.voidmaw.prev": "§a◀ Previous page",
   "container.voidmaw.next": "§aNext page ▶",
   "container.voidmaw.sort": "§bSort warehouse",
+  "container.voidmaw.count": "§7Count: %s",
   "hud.voidmaw.level": "Lv.%s %s/%s",
   "hud.voidmaw.stats": "R %s blocks",
   "hud.voidmaw.inactive": "The maw sleeps",

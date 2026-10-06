@@ -21,9 +21,19 @@ public final class Balance {
 
     /** Work budgets keep full-height absorption from blocking the server tick.
      * The scan budget counts cells inside non-empty sections only, so it is spent
-     * on real geometry instead of sky and air. */
+     * on real geometry instead of sky and air. Both scale with level: bigger maws
+     * must clear proportionally bigger discs. Block mutation has to stay on the
+     * server thread, so scaled throughput is the safe "more parallel" speed. */
     public static final int BLOCK_SCAN_BUDGET = 16384;
     public static final int MAX_BLOCKS_PER_TICK = 16;
+
+    public static int scanBudget(int level) {
+        return Math.min(BLOCK_SCAN_BUDGET + Math.max(0, level - 1) * 4096, 65536);
+    }
+
+    public static int blocksPerTick(int level) {
+        return Math.min(MAX_BLOCKS_PER_TICK + Math.max(0, level - 1) * 4, 80);
+    }
 
     /** Hand every player one Singularity Core the first time they enter the world. */
     public static final boolean GIVE_CORE_ON_FIRST_JOIN = true;

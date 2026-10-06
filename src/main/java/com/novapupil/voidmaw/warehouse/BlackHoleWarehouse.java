@@ -21,6 +21,7 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,26 +30,32 @@ import java.util.UUID;
 /**
  * Per-black-hole item storage, keyed by the hole owner's UUID.
  *
- * Capacity is paginated: {@link #PAGES} pages of {@link #SIZE} slots each, where the
- * last row of every page (slots {@link #RESERVED_START}..) is reserved for GUI page
- * controls and never stores items.
+ * Storage records ITEM TYPES, not stacks: every distinct item (item + components)
+ * occupies one entry with an unbounded count, so the nine 45-slot pages hold up to
+ * {@link #CAPACITY} different types instead of a few hundred stacks.
  *
  * Persistence is plain JSON files under {@code <world>/data/voidmaw/warehouses/<uuid>.json}
- * (stacks encoded with ItemStack.CODEC) - deliberately NOT NBT.
+ * (items encoded with ItemStack.CODEC) - deliberately NOT NBT. Legacy slot-based saves
+ * are migrated on load.
  */
 public final class BlackHoleWarehouse {
-    public static final int SIZE = 54;
+    public static final int SLOTS_PER_PAGE = 45;
     public static final int PAGES = 9;
-    /** Slots at/above this index in a page are GUI controls, not storage. */
-    public static final int RESERVED_START = 45;
+    /** GUI page size including the 9-slot navigation row. */
+    public static final int SIZE = SLOTS_PER_PAGE + 9;
+    public static final int CAPACITY = PAGES * SLOTS_PER_PAGE;
 
     private static final Map<MinecraftServer, Map<UUID, BlackHoleWarehouse>> LOADED = new java.util.IdentityHashMap<>();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
+    /** One warehouse row: the item identity plus how many of it the maw swallowed. */
+    public record Entry(ItemStack template, long count) {}
+
     private final UUID owner;
     private final RegistryWrapper.WrapperLookup registries;
     private final Path file;
-    private final List<net.minecraft.util.collection.DefaultedList<ItemStack>> pages = new ArrayList<>();
+    /** Insertion-ordered entries; index == global display slot (page * 45 + slot). */
+    private final List<Entry> entries = new ArrayList<>();
     private boolean dirty;
     private boolean loadFailed;
 
@@ -61,9 +68,6 @@ public final class BlackHoleWarehouse {
         this.registries = registries;
         this.owner = owner;
         this.file = file;
-        for (int p = 0; p < PAGES; p++) {
-            pages.add(net.minecraft.util.collection.DefaultedList.ofSize(SIZE, ItemStack.EMPTY));
-        }
     }
 
     public static BlackHoleWarehouse get(MinecraftServer server, UUID owner) {
@@ -78,11 +82,12 @@ public final class BlackHoleWarehouse {
         return PAGES;
     }
 
-    public net.minecraft.util.collection.DefaultedList<ItemStack> page(int index) {
-        return pages.get(Math.clamp(index, 0, PAGES - 1));
+    /** Read-only view in display order; index = page * {@link #SLOTS_PER_PAGE} + slot. */
+    public List<Entry> entries() {
+        return List.copyOf(entries);
     }
 
-    /** Fills matching partial stacks first, then empty slots. Returns whatever did not fit. */
+    /** Adds a whole stack, merging into its type entry. Returns whatever did not fit. */
     public ItemStack insert(ItemStack stack) {
         if (stack == null || stack.isEmpty()) {
             return ItemStack.EMPTY;
@@ -90,78 +95,70 @@ public final class BlackHoleWarehouse {
         if (loadFailed) {
             return stack.copy();
         }
-        ItemStack remainder = stack.copy();
-        for (int p = 0; p < PAGES && !remainder.isEmpty(); p++) {
-            net.minecraft.util.collection.DefaultedList<ItemStack> page = pages.get(p);
-            for (int i = 0; i < RESERVED_START && !remainder.isEmpty(); i++) {
-                ItemStack slot = page.get(i);
-                if (!slot.isEmpty() && ItemStack.areItemsAndComponentsEqual(slot, remainder)) {
-                    int room = slot.getMaxCount() - slot.getCount();
-                    if (room > 0) {
-                        int moved = Math.min(room, remainder.getCount());
-                        slot.increment(moved);
-                        remainder.decrement(moved);
-                        markDirty();
-                    }
-                }
-            }
-            for (int i = 0; i < RESERVED_START && !remainder.isEmpty(); i++) {
-                if (page.get(i).isEmpty()) {
-                    page.set(i, remainder.split(Math.min(remainder.getCount(), remainder.getMaxCount())));
-                    markDirty();
-                }
+        for (int i = 0; i < entries.size(); i++) {
+            Entry entry = entries.get(i);
+            if (ItemStack.areItemsAndComponentsEqual(entry.template(), stack)) {
+                entries.set(i, new Entry(entry.template(), entry.count() + stack.getCount()));
+                markDirty();
+                return ItemStack.EMPTY;
             }
         }
-        return remainder;
+        if (entries.size() >= CAPACITY) {
+            return stack.copy();
+        }
+        entries.add(new Entry(stack.copyWithCount(1), stack.getCount()));
+        markDirty();
+        return ItemStack.EMPTY;
     }
 
-    /** Consolidates and sorts every page: merge stacks, order by item id, compact. */
+    /** Takes one item of the entry; removes the entry when it runs dry. */
+    public ItemStack takeOne(int globalIndex) {
+        return take(globalIndex, 1);
+    }
+
+    /** Takes up to one full stack of the entry; removes the entry when it runs dry. */
+    public ItemStack takeStack(int globalIndex) {
+        Entry entry = entryAt(globalIndex);
+        if (entry == null) {
+            return ItemStack.EMPTY;
+        }
+        return take(globalIndex, (int) Math.min(entry.count(), entry.template().getMaxCount()));
+    }
+
+    /** Wipes every item of the entry's type. True when something was destroyed. */
+    public boolean destroyAll(int globalIndex) {
+        if (entryAt(globalIndex) == null) {
+            return false;
+        }
+        entries.remove(globalIndex);
+        markDirty();
+        return true;
+    }
+
+    private ItemStack take(int globalIndex, int amount) {
+        Entry entry = entryAt(globalIndex);
+        if (entry == null || amount <= 0) {
+            return ItemStack.EMPTY;
+        }
+        int taken = (int) Math.min(amount, entry.count());
+        long remaining = entry.count() - taken;
+        if (remaining <= 0) {
+            entries.remove(globalIndex);
+        } else {
+            entries.set(globalIndex, new Entry(entry.template(), remaining));
+        }
+        markDirty();
+        return entry.template().copyWithCount(taken);
+    }
+
+    private Entry entryAt(int globalIndex) {
+        return globalIndex >= 0 && globalIndex < entries.size() ? entries.get(globalIndex) : null;
+    }
+
+    /** Orders the type entries by item id so page slices stay predictable. */
     public void sortAll() {
-        List<ItemStack> all = new ArrayList<>();
-        for (net.minecraft.util.collection.DefaultedList<ItemStack> page : pages) {
-            for (int i = 0; i < RESERVED_START; i++) {
-                if (!page.get(i).isEmpty()) {
-                    all.add(page.get(i));
-                }
-                page.set(i, ItemStack.EMPTY);
-            }
-        }
-
-        List<ItemStack> merged = new ArrayList<>();
-        for (ItemStack stack : all) {
-            for (ItemStack target : merged) {
-                if (stack.isEmpty()) {
-                    break;
-                }
-                if (ItemStack.areItemsAndComponentsEqual(target, stack)) {
-                    int room = target.getMaxCount() - target.getCount();
-                    int moved = Math.min(room, stack.getCount());
-                    target.increment(moved);
-                    stack.decrement(moved);
-                }
-            }
-            if (!stack.isEmpty()) {
-                merged.add(stack);
-            }
-        }
-        merged.sort((a, b) -> {
-            int c = Registries.ITEM.getId(a.getItem()).toString()
-                    .compareTo(Registries.ITEM.getId(b.getItem()).toString());
-            return c != 0 ? c : Integer.compare(b.getCount(), a.getCount());
-        });
-
-        int page = 0;
-        int slot = 0;
-        for (ItemStack stack : merged) {
-            if (page >= PAGES) {
-                break;
-            }
-            pages.get(page).set(slot, stack);
-            if (++slot >= RESERVED_START) {
-                slot = 0;
-                page++;
-            }
-        }
+        entries.sort(Comparator.comparing(entry ->
+                Registries.ITEM.getId(entry.template().getItem()).toString()));
         markDirty();
     }
 
@@ -200,25 +197,17 @@ public final class BlackHoleWarehouse {
         Path temporary = null;
         try {
             RegistryOps<JsonElement> ops = RegistryOps.of(JsonOps.INSTANCE, registries);
-            JsonArray items = new JsonArray();
-            for (int p = 0; p < PAGES; p++) {
-                net.minecraft.util.collection.DefaultedList<ItemStack> page = pages.get(p);
-                for (int i = 0; i < RESERVED_START; i++) {
-                    ItemStack stack = page.get(i);
-                    if (stack.isEmpty()) {
-                        continue;
-                    }
-                    JsonObject entry = new JsonObject();
-                    entry.addProperty("page", p);
-                    entry.addProperty("slot", i);
-                    entry.add("item", ItemStack.CODEC.encodeStart(ops, stack).getOrThrow());
-                    items.add(entry);
-                }
+            JsonArray saved = new JsonArray();
+            for (Entry entry : entries) {
+                JsonObject json = new JsonObject();
+                json.add("item", ItemStack.CODEC.encodeStart(ops, entry.template()).getOrThrow());
+                json.addProperty("count", entry.count());
+                saved.add(json);
             }
             JsonObject root = new JsonObject();
             root.addProperty("owner", owner.toString());
-            root.addProperty("pages", PAGES);
-            root.add("items", items);
+            root.addProperty("version", 2);
+            root.add("entries", saved);
             Files.createDirectories(file.getParent());
             temporary = Files.createTempFile(file.getParent(), owner + "-", ".tmp");
             Files.writeString(temporary, GSON.toJson(root));
@@ -249,38 +238,49 @@ public final class BlackHoleWarehouse {
         try {
             RegistryOps<JsonElement> ops = RegistryOps.of(JsonOps.INSTANCE, registries);
             JsonObject root = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
-            JsonArray items = root.getAsJsonArray("items");
-            List<net.minecraft.util.collection.DefaultedList<ItemStack>> loaded = new ArrayList<>();
-            for (int p = 0; p < PAGES; p++) {
-                loaded.add(net.minecraft.util.collection.DefaultedList.ofSize(SIZE, ItemStack.EMPTY));
-            }
-            for (JsonElement element : items) {
-                JsonObject entry = element.getAsJsonObject();
-                // Legacy saves had no "page" field; everything lands on page 0.
-                int page = entry.has("page") ? entry.get("page").getAsInt() : 0;
-                int slot = entry.get("slot").getAsInt();
-                if (page < 0 || page >= PAGES || slot < 0 || slot >= SIZE) {
-                    throw new IllegalArgumentException("Invalid warehouse position: " + page + "/" + slot);
+            List<Entry> loaded = new ArrayList<>();
+            if (root.has("entries")) {
+                for (JsonElement element : root.getAsJsonArray("entries")) {
+                    JsonObject json = element.getAsJsonObject();
+                    ItemStack template = ItemStack.CODEC.parse(ops, json.get("item")).getOrThrow();
+                    merge(loaded, template, json.get("count").getAsLong());
                 }
-                // Older versions wrote decorative controls into their warehouse files.
-                if (slot >= RESERVED_START) {
-                    continue;
-                }
-                if (!loaded.get(page).get(slot).isEmpty()) {
-                    throw new IllegalArgumentException("Duplicate warehouse position: " + page + "/" + slot);
-                }
-                loaded.get(page).set(slot, ItemStack.CODEC.parse(ops, entry.get("item")).getOrThrow());
-            }
-            for (int p = 0; p < PAGES; p++) {
-                for (int i = 0; i < RESERVED_START; i++) {
-                    pages.get(p).set(i, loaded.get(p).get(i));
+            } else {
+                // Legacy slot-based saves: every stored stack becomes a type entry.
+                for (JsonElement element : root.getAsJsonArray("items")) {
+                    JsonObject json = element.getAsJsonObject();
+                    int slot = json.get("slot").getAsInt();
+                    if (slot >= SLOTS_PER_PAGE) {
+                        continue; // older versions wrote decorative controls into saves
+                    }
+                    ItemStack stack = ItemStack.CODEC.parse(ops, json.get("item")).getOrThrow();
+                    merge(loaded, stack, stack.getCount());
                 }
             }
+            if (loaded.size() > CAPACITY) {
+                throw new IllegalArgumentException("Warehouse holds more types than capacity");
+            }
+            entries.clear();
+            entries.addAll(loaded);
             loadFailed = false;
         } catch (IOException | RuntimeException ex) {
             loadFailed = true;
             VoidMaw.LOGGER.warn("Failed to load voidmaw warehouse for {}; original file will not be overwritten: {}",
                     owner, ex.toString());
         }
+    }
+
+    private static void merge(List<Entry> target, ItemStack stack, long count) {
+        if (stack.isEmpty() || count <= 0) {
+            return;
+        }
+        for (int i = 0; i < target.size(); i++) {
+            Entry entry = target.get(i);
+            if (ItemStack.areItemsAndComponentsEqual(entry.template(), stack)) {
+                target.set(i, new Entry(entry.template(), entry.count() + count));
+                return;
+            }
+        }
+        target.add(new Entry(stack.copyWithCount(1), count));
     }
 }

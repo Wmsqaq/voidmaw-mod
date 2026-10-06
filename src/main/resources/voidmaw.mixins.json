@@ -12,6 +12,9 @@
     "DecoratedPotBlockEntityMixin",
     "LivingEntityMixin"
   ],
+  "client": [
+    "client.HandledScreenMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

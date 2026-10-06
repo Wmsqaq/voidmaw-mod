@@ -33,10 +33,20 @@ public class VoidMaw implements ModInitializer {
         PayloadTypeRegistry.playS2C().register(MassSyncPayload.V2_ID, MassSyncPayload.LEGACY_CODEC);
         PayloadTypeRegistry.playS2C().register(MassSyncPayload.LEGACY_ID, MassSyncPayload.LEGACY_CODEC);
         PayloadTypeRegistry.playC2S().register(OpenWarehousePayload.ID, OpenWarehousePayload.CODEC);
+        PayloadTypeRegistry.playC2S().register(
+                com.novapupil.voidmaw.warehouse.WarehouseActionPayload.ID,
+                com.novapupil.voidmaw.warehouse.WarehouseActionPayload.CODEC);
         // The typed receiver already runs on the server thread. Handle it before
         // a disconnect can leave a queued request holding an obsolete player.
         ServerPlayNetworking.registerGlobalReceiver(OpenWarehousePayload.ID, (payload, context) ->
                 WarehouseUi.open(context.player()));
+        ServerPlayNetworking.registerGlobalReceiver(
+                com.novapupil.voidmaw.warehouse.WarehouseActionPayload.ID, (payload, context) -> {
+                    if (context.player().currentScreenHandler
+                            instanceof com.novapupil.voidmaw.warehouse.WarehouseScreenHandler handler) {
+                        handler.handleAction(payload.slot(), payload.action());
+                    }
+                });
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             BlackHoleWarehouse.flushAll(server);
             com.novapupil.voidmaw.blackhole.HoleProgress.flushAll(server);

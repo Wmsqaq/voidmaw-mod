@@ -447,11 +447,12 @@ public final class BlackHoleManager {
         }
         int baseSection = world.getBottomY() >> 4;
         int bottomSection = Math.max(0, (bottom >> 4) - baseSection);
-        int consumed = 0;
+        int blocksPerTick = Balance.blocksPerTick(state.level());
         int checked = 0;
         // Spread the per-tick absorption across every chunk in the disc so no region
         // starves while the cursor works through a dense neighbour.
-        int quota = Math.max(1, Balance.MAX_BLOCKS_PER_TICK / (int) Math.min(chunkVolume, 64));
+        int quota = Math.max(1, blocksPerTick / (int) Math.min(chunkVolume, 64));
+        int consumed = 0;
 
         sweep:
         for (int visited = 0; visited < chunkVolume; visited++) {
@@ -493,7 +494,8 @@ public final class BlackHoleManager {
                         }
                         int x = (cx << 4) + lx;
                         for (int lz = row.start(); lz <= row.endInclusive(); lz++) {
-                            if (++checked > Balance.BLOCK_SCAN_BUDGET || consumed >= Balance.MAX_BLOCKS_PER_TICK) {
+                            if (++checked > Balance.scanBudget(state.level())
+                                    || consumed >= blocksPerTick) {
                                 break sweep;
                             }
                             if (taken >= quota) {

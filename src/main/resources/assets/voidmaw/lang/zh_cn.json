@@ -16,6 +16,7 @@
   "container.voidmaw.prev": "§a◀ 上一页",
   "container.voidmaw.next": "§a下一页 ▶",
   "container.voidmaw.sort": "§b整理仓库",
+  "container.voidmaw.count": "§7数量：%s",
   "hud.voidmaw.level": "Lv.%s %s/%s",
   "hud.voidmaw.stats": "半径 %s 格",
   "hud.voidmaw.inactive": "黑洞沉睡中",
