@@ -26,16 +26,19 @@ public class VoidMawClient implements ClientModInitializer {
         ClientPlayNetworking.registerGlobalReceiver(MassSyncPayload.ID, (payload, context) ->
                 context.client().execute(() -> BlackHoleRenderer.updateState(payload)));
 
+        // Categories are globally registered in 1.21.10 - create ONCE and share,
+        // a second create() with the same id crashes the client entrypoint.
+        KeyBinding.Category category = KeyBinding.Category.create(Identifier.of(VoidMaw.MOD_ID, "main"));
         KeyBinding hudEditKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.voidmaw.hud_edit",
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_H,
-                KeyBinding.Category.create(Identifier.of(VoidMaw.MOD_ID, "main"))));
+                category));
         KeyBinding warehouseKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.voidmaw.warehouse",
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_G,
-                KeyBinding.Category.create(Identifier.of(VoidMaw.MOD_ID, "main"))));
+                category));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (hudEditKey.wasPressed()) {
