@@ -1,0 +1,18 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.novapupil.voidmaw.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "ScreenHandlerMixin",
+    "PlayerInventoryMixin",
+    "ServerPlayNetworkHandlerMixin",
+    "ShelfBlockEntityMixin",
+    "ItemFrameEntityMixin",
+    "DecoratedPotBlockEntityMixin",
+    "LivingEntityMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

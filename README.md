@@ -44,6 +44,7 @@ Lv6+ 质量阈值为 `3000 + 1800n + 900n²`（n=等级−5）。等级由累计
 
 ### 其他
 
+- **奇点核心锁死第九格**：核心固定在快捷栏最右格，无法点选/Shift 移动/拖拽/数字键换走/丢进容器；按 Q/Ctrl+Q 不丢出，按 F 不进副手；展示框、饰纹陶罐、书架、盔甲架、悦灵等世界交互拿不走核心；创造模式改槽/丢核数据包被服务端拒绝；**死亡不掉落**，重生自动回位；多余核心自动清除
 - 基岩、屏障、强化深板岩、传送门方块等不可吞噬（数据包标签 `#voidmaw:unswallowable`）
 - 不吞任何玩家（含自己）
 - 进服礼包：每位玩家首次进入世界自动获得 1 个奇点核心（`Balance.GIVE_CORE_ON_FIRST_JOIN` 可关闭）
@@ -98,4 +99,4 @@ gradlew runClient    # 开发环境进游戏实测
 - 玩法参考 Voodoo 的 Hole.io（黑洞大作战）：等级解锁猎物、边缘翻滚吞噬、限时成长循环
 - 工程模板与发布流程借鉴同作者工作区的 `killstreak-mod` / `radkeyboard`
 - 社区参考：CurseForge [Blackhole](https://www.curseforge.com/minecraft/mc-mods/blackhole)（引力吸方块并变大）的机制思路；全部代码为本仓库原创实现
-- 依赖：[Fabric API](https://modrinth.com/mod/fabric-api)。零 Mixin，全部通过 Fabric API 事件实现
+- 依赖：[Fabric API](https://modrinth.com/mod/fabric-api)。吞噬/渲染走 Fabric API 事件；仅核心防丢失等少数库存保护使用少量服务端 Mixin（见 `voidmaw.mixins.json`）

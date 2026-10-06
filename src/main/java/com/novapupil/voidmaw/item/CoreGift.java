@@ -1,7 +1,6 @@
 package com.novapupil.voidmaw.item;
 
 import com.novapupil.voidmaw.blackhole.Balance;
-import net.minecraft.item.ItemStack;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -24,11 +23,7 @@ public final class CoreGift {
         if (state.alreadyGranted(playerId)) {
             return;
         }
-        ItemStack stack = new ItemStack(ModItems.SINGULARITY_CORE);
-        player.getInventory().insertStack(stack);
-        if (!stack.isEmpty() && player.dropItem(stack, false) == null) {
-            return;
-        }
+        CoreLock.ensure(player);
         state.markGranted(playerId);
         player.sendMessage(Text.translatable("commands.voidmaw.gift_received"), false);
     }

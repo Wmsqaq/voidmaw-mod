@@ -11,6 +11,9 @@
   "license": "MIT",
   "icon": "assets/voidmaw/icon.png",
   "environment": "*",
+  "mixins": [
+    "voidmaw.mixins.json"
+  ],
   "entrypoints": {
     "main": [
       "com.novapupil.voidmaw.VoidMaw"

@@ -3,6 +3,7 @@ package com.novapupil.voidmaw;
 import com.novapupil.voidmaw.blackhole.BlackHoleManager;
 import com.novapupil.voidmaw.command.VoidMawCommand;
 import com.novapupil.voidmaw.item.CoreGift;
+import com.novapupil.voidmaw.item.CoreLock;
 import com.novapupil.voidmaw.item.ModItems;
 import com.novapupil.voidmaw.net.MassSyncPayload;
 import com.novapupil.voidmaw.net.OpenWarehousePayload;
@@ -10,6 +11,7 @@ import com.novapupil.voidmaw.warehouse.WarehouseUi;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
+import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import com.novapupil.voidmaw.warehouse.BlackHoleWarehouse;
@@ -35,7 +37,6 @@ public class VoidMaw implements ModInitializer {
         // a disconnect can leave a queued request holding an obsolete player.
         ServerPlayNetworking.registerGlobalReceiver(OpenWarehousePayload.ID, (payload, context) ->
                 WarehouseUi.open(context.player()));
-        ServerTickEvents.END_SERVER_TICK.register(BlackHoleManager::tick);
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             BlackHoleWarehouse.flushAll(server);
             com.novapupil.voidmaw.blackhole.HoleProgress.flushAll(server);
@@ -50,7 +51,16 @@ public class VoidMaw implements ModInitializer {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayerEntity joined = handler.getPlayer();
             CoreGift.onJoin(joined);
+            CoreLock.ensure(joined);
             VoidMawBroadcast.sendJoinNotice(joined);
+        });
+        ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) ->
+                CoreLock.ensure(newPlayer));
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            BlackHoleManager.tick(server);
+            for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+                CoreLock.ensure(player);
+            }
         });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
                 BlackHoleManager.onDisconnect(handler.getPlayer()));

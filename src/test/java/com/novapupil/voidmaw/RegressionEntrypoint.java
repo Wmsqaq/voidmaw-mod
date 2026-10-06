@@ -11,6 +11,7 @@ public final class RegressionEntrypoint implements ModInitializer {
         try {
             com.novapupil.voidmaw.blackhole.AbsorptionRegressionTest.main(new String[0]);
             com.novapupil.voidmaw.warehouse.WarehouseRegressionTest.main(new String[0]);
+            com.novapupil.voidmaw.item.CoreLockRegressionTest.main(new String[0]);
             System.exit(0);
         } catch (Throwable failure) {
             failure.printStackTrace();
