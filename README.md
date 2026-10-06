@@ -79,6 +79,7 @@ gradlew runClient    # 开发环境进游戏实测
 
 ## 致谢 / 参考
 
+- **可拖动 HUD 编辑器、配置读写与持久化样板移植自同作者的 [killstreak-mod](https://github.com/Wmsqaq/killstreak-mod)（MIT © 2026 novapupil），相关源文件头部均带移植声明**；killstreak 的面板样式又源自 voice-remorphed
 - 玩法参考 Voodoo 的 Hole.io（黑洞大作战）：等级解锁猎物、边缘翻滚吞噬、限时成长循环
 - 工程模板与发布流程借鉴同作者工作区的 `killstreak-mod` / `radkeyboard`
 - 社区参考：CurseForge [Blackhole](https://www.curseforge.com/minecraft/mc-mods/blackhole)（引力吸方块并变大）的机制思路；全部代码为本仓库原创实现

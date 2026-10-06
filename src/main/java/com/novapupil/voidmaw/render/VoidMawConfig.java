@@ -1,3 +1,7 @@
+/*
+ * Config loader/saver ported from killstreak-mod's KillstreakConfig:
+ *   https://github.com/Wmsqaq/killstreak-mod - MIT License, Copyright (c) 2026 novapupil.
+ */
 package com.novapupil.voidmaw.render;
 
 import com.google.gson.Gson;

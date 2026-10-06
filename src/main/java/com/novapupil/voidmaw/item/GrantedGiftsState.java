@@ -1,3 +1,7 @@
+/*
+ * Persistent-state boilerplate follows killstreak-mod's KillstreakState pattern:
+ *   https://github.com/Wmsqaq/killstreak-mod - MIT License, Copyright (c) 2026 novapupil.
+ */
 package com.novapupil.voidmaw.item;
 
 import com.novapupil.voidmaw.VoidMaw;

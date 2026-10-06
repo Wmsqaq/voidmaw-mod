@@ -1,3 +1,8 @@
+/*
+ * HUD editor overlay, ported from killstreak-mod's client HudEditScreen:
+ *   https://github.com/Wmsqaq/killstreak-mod - MIT License, Copyright (c) 2026 novapupil.
+ * Adapted for Void Maw's single-panel HUD (drag to move, scroll to scale, R to reset).
+ */
 package com.novapupil.voidmaw.render;
 
 import com.novapupil.voidmaw.VoidMawClient;

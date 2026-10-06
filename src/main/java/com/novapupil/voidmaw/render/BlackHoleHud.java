@@ -1,3 +1,9 @@
+/*
+ * Draggable HUD panel. Panel styling (translucent box, border, top highlight) follows
+ * killstreak-mod's StatsHud, which in turn credits voice-remorphed's HUD style; the
+ * drag/scale/edit-screen mechanics are ported from killstreak-mod:
+ *   https://github.com/Wmsqaq/killstreak-mod - MIT License, Copyright (c) 2026 novapupil.
+ */
 package com.novapupil.voidmaw.render;
 
 import com.novapupil.voidmaw.VoidMaw;
