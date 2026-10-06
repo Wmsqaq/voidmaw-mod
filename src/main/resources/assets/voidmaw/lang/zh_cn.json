@@ -15,5 +15,10 @@
   "container.voidmaw.next": "§a下一页 ▶",
   "hud.voidmaw.level": "黑洞 Lv.%s · %s/%s",
   "hud.voidmaw.level_max": "黑洞 Lv.%s · 满级",
-  "hud.voidmaw.mass": "质量 %s · 半径 %s 格"
+  "hud.voidmaw.mass": "质量 %s · 半径 %s 格",
+  "hud.voidmaw.inactive": "黑洞未激活",
+  "hud.voidmaw.edit_title": "拖动调整黑洞 HUD",
+  "hud.voidmaw.edit_hint": "拖动面板调整位置 · 滚轮缩放 · R 复位 · Esc 退出",
+  "key.categories.voidmaw.main": "虚空之喉",
+  "key.voidmaw.hud_edit": "编辑黑洞 HUD"
 }
