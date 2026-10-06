@@ -22,6 +22,9 @@ import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
+import net.minecraft.network.packet.s2c.play.TitleFadeS2CPacket;
+import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -60,7 +63,8 @@ public final class BlackHoleManager {
 
     public static void start(ServerPlayerEntity player) {
         if (ACTIVE.containsKey(player.getUuid())) {
-            player.sendMessage(ALREADY_OPEN, false);
+            // Overlay text instead of chat: toggling repeatedly must not bury the chat log.
+            player.sendMessage(ALREADY_OPEN, true);
             return;
         }
         BlackHoleState state;
@@ -74,8 +78,16 @@ public final class BlackHoleManager {
         ACTIVE.put(player.getUuid(), state);
         world(player).playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDER_DRAGON_GROWL,
                 SoundCategory.PLAYERS, 0.8f, 0.6f);
-        player.sendMessage(Text.translatable("commands.voidmaw.started"), false);
+        showTitle(player, Text.translatable("title.voidmaw.started"),
+                Text.translatable("title.voidmaw.started_hint"));
         sync(player);
+    }
+
+    /** Center-screen title for one-off dramatic moments; fade keeps it unobtrusive. */
+    private static void showTitle(ServerPlayerEntity player, Text title, Text subtitle) {
+        player.networkHandler.sendPacket(new TitleFadeS2CPacket(5, 40, 10));
+        player.networkHandler.sendPacket(new SubtitleS2CPacket(subtitle));
+        player.networkHandler.sendPacket(new TitleS2CPacket(title));
     }
 
     /**
@@ -114,17 +126,17 @@ public final class BlackHoleManager {
             world.spawnParticles(ParticleTypes.EXPLOSION_EMITTER,
                     player.getX(), player.getY(), player.getZ(), 1, 0.0, 0.0, 0.0, 0.0);
             player.sendMessage(Text.translatable("commands.voidmaw.detonated",
-                    level, String.format(java.util.Locale.ROOT, "%.2f", power)), false);
+                    String.format(java.util.Locale.ROOT, "%.2f", power)), true);
         } else if (clearMass) {
             world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT,
                     SoundCategory.PLAYERS, 0.8f, 0.5f);
             player.sendMessage(Text.translatable("commands.voidmaw.mass_lost",
-                    String.format(java.util.Locale.ROOT, "%.0f", mass)), false);
+                    String.format(java.util.Locale.ROOT, "%.0f", mass)), true);
         } else {
             world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT,
                     SoundCategory.PLAYERS, 0.8f, 0.5f);
             player.sendMessage(Text.translatable("commands.voidmaw.stopped",
-                    String.format(java.util.Locale.ROOT, "%.1f", mass)), false);
+                    String.format(java.util.Locale.ROOT, "%.1f", mass)), true);
         }
         sync(player);
     }
@@ -145,7 +157,7 @@ public final class BlackHoleManager {
                 progress.reset();
                 progress.flush();
                 player.sendMessage(Text.translatable("commands.voidmaw.mass_lost",
-                        String.format(java.util.Locale.ROOT, "%.0f", lost)), false);
+                        String.format(java.util.Locale.ROOT, "%.0f", lost)), true);
             }
         } catch (IllegalStateException unreadable) {
             // Progress file unreadable: nothing can be cleared safely.
@@ -281,7 +293,7 @@ public final class BlackHoleManager {
         world.spawnParticles(ParticleTypes.REVERSE_PORTAL,
                 player.getX(), player.getY() + 1.0, player.getZ(), 30, r * 0.5, 1.0, r * 0.5, 0.4);
         player.sendMessage(Text.translatable("commands.voidmaw.levelup",
-                level, String.format(java.util.Locale.ROOT, "%.1f", r)), false);
+                level, String.format(java.util.Locale.ROOT, "%.1f", r)), true);
     }
 
     /**
