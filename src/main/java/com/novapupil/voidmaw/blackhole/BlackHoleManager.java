@@ -162,7 +162,7 @@ public final class BlackHoleManager {
             return;
         }
         discardDiscVisual(state);
-        MassSyncPayload payload = new MassSyncPayload(player.getUuid(), false, 0, 0.0, 0.0, 0.0);
+        MassSyncPayload payload = new MassSyncPayload(player.getUuid(), false, 0, 0.0, 0.0, 0.0, 0);
         for (ServerPlayerEntity watcher : PlayerLookup.tracking(player)) {
             ServerPlayNetworking.send(watcher, payload);
         }
@@ -541,7 +541,8 @@ public final class BlackHoleManager {
         MassSyncPayload payload = new MassSyncPayload(player.getUuid(), active, level,
                 active ? state.mass() : 0.0,
                 active ? HoleLevel.radiusFor(Math.max(level, 1)) : 0.0,
-                active ? state.mouthY() : 0.0);
+                active ? state.mouthY() : 0.0,
+                active ? state.ticksLeft() : 0);
         ServerPlayNetworking.send(player, payload);
         for (ServerPlayerEntity watcher : PlayerLookup.tracking(player)) {
             if (!watcher.getUuid().equals(player.getUuid())) {

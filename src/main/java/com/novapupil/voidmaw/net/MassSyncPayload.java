@@ -12,7 +12,7 @@ import java.util.UUID;
  * S2C sync of one player's black hole state so every client can draw the maw.
  */
 public record MassSyncPayload(UUID playerId, boolean active, int level, double mass, double radius,
-                              double mouthY) implements CustomPayload {
+                              double mouthY, int ticksLeft) implements CustomPayload {
     public static final CustomPayload.Id<MassSyncPayload> ID =
             new CustomPayload.Id<>(Identifier.of(VoidMaw.MOD_ID, "mass_sync"));
 
@@ -29,6 +29,7 @@ public record MassSyncPayload(UUID playerId, boolean active, int level, double m
         buf.writeFloat((float) payload.mass());
         buf.writeFloat((float) payload.radius());
         buf.writeFloat((float) payload.mouthY());
+        buf.writeShort(payload.ticksLeft());
     }
 
     private static MassSyncPayload read(ByteBuf buf) {
@@ -38,7 +39,8 @@ public record MassSyncPayload(UUID playerId, boolean active, int level, double m
         double mass = buf.readFloat();
         double radius = buf.readFloat();
         double mouthY = buf.readFloat();
-        return new MassSyncPayload(playerId, active, level, mass, radius, mouthY);
+        int ticksLeft = buf.readShort();
+        return new MassSyncPayload(playerId, active, level, mass, radius, mouthY, ticksLeft);
     }
 
     @Override

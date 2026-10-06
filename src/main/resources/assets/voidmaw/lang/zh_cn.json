@@ -17,7 +17,7 @@
   "container.voidmaw.sort": "§b整理仓库",
   "hud.voidmaw.level": "黑洞 Lv.%s · %s/%s",
   "hud.voidmaw.level_max": "黑洞 Lv.%s · 满级",
-  "hud.voidmaw.mass": "质量 %s · 半径 %s 格",
+  "hud.voidmaw.mass": "质量 %s · 半径 %s 格 · %s 秒后坍缩",
   "hud.voidmaw.inactive": "黑洞沉睡中",
   "hud.voidmaw.edit_title": "拖动黑洞 HUD",
   "hud.voidmaw.edit_hint": "拖动移动 · 滚轮缩放 · R 复位 · Esc 完成",

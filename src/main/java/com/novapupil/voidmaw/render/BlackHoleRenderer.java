@@ -21,7 +21,7 @@ public final class BlackHoleRenderer {
     private static final long STALE_AFTER_MS = 5000;
     private static final Map<UUID, Hole> HOLES = new HashMap<>();
 
-    public record Hole(int level, double mass, double radius, double mouthY, long updatedAt) {
+    public record Hole(int level, double mass, double radius, double mouthY, int ticksLeft, long updatedAt) {
     }
 
     private BlackHoleRenderer() {
@@ -30,7 +30,7 @@ public final class BlackHoleRenderer {
     public static void updateState(MassSyncPayload payload) {
         if (payload.active()) {
             HOLES.put(payload.playerId(), new Hole(payload.level(), payload.mass(),
-                    payload.radius(), payload.mouthY(), System.currentTimeMillis()));
+                    payload.radius(), payload.mouthY(), payload.ticksLeft(), System.currentTimeMillis()));
         } else {
             HOLES.remove(payload.playerId());
             MinecraftClient client = MinecraftClient.getInstance();
